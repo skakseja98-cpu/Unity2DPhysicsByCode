@@ -133,7 +133,7 @@ GameObject:
   - component: {fileID: 86443579}
   m_Layer: 0
   m_Name: Player
-  m_TagString: Untagged
+  m_TagString: Player
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
@@ -166,21 +166,22 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 49a7d8191ec8a3945a3855368c9c02a0, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Player_Controller2D
-  maxSpeed: 10
-  acceleration: 30
-  deceleration: 50
-  turnSpeed: 120
-  jumpHeight: 4
+  maxSpeed: 7
+  acceleration: 20
+  deceleration: 40
+  turnSpeed: 80
+  jumpHeight: 3
   timeToJumpApex: 0.4
   maxFallSpeed: 20
-  fallGravityMult: 1.5
+  fallGravityMult: 1.2
   jumpCutMult: 0.5
+  coyoteTime: 0.05
   groundLayer:
     serializedVersion: 2
     m_Bits: 64
   rayLength: 0.7
-  rayInset: 1
-  canJump: 0
+  rayInset: 0.02
+  isGroundDetected: 0
 --- !u!50 &86443578
 Rigidbody2D:
   serializedVersion: 5

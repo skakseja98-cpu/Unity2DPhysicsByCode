@@ -20,17 +20,21 @@ public class Player_Controller2D : MonoBehaviour
     public float fallGravityMult = 1.5f;
     public float jumpCutMult = 0.5f;
 
+    [Header("Coyote Time (New!)")]
+    public float coyoteTime = 0.2f;    // 떨어져도 점프 가능한 유예 시간 (초)
+    private float coyoteTimeCounter;   // 실제 타이머
+
     [Header("Ground Detection (Logic)")]
     public LayerMask groundLayer;
-    public float rayLength = 0.1f;   // 발바닥에서 얼마나 더 길게 검사할지 (짧을수록 정교함)
-    public float rayInset = 0.05f;   // 박스 모서리에서 살짝 안쪽으로 들어온 위치에서 쏠 것인가 (벽타기 방지)
+    public float rayLength = 0.1f;
+    public float rayInset = 0.05f;
 
-    // 상태 변수 (이름 변경됨)
-    [SerializeField] // 인스펙터에서 확인용 (수정X)
-    private bool canJump; 
+    // 땅 감지 여부 (Raycast 결과)
+    [SerializeField]
+    private bool isGroundDetected; // 변수명 명확화를 위해 변경 (기존 canJump)
 
     private Rigidbody2D rb;
-    private BoxCollider2D boxCol; // 발바닥 위치 계산용
+    private BoxCollider2D boxCol;
     
     private Vector2 velocity;
     private float moveInput;
@@ -42,30 +46,48 @@ public class Player_Controller2D : MonoBehaviour
         rb = GetComponent<Rigidbody2D>();
         boxCol = GetComponent<BoxCollider2D>();
 
-        // 물리 설정
         rb.bodyType = RigidbodyType2D.Dynamic;
-        rb.gravityScale = 0f; // 중력은 내가 계산함
+        rb.gravityScale = 0f; 
         rb.constraints = RigidbodyConstraints2D.FreezeRotation;
         rb.collisionDetectionMode = CollisionDetectionMode2D.Continuous;
 
-        // 중력 계산
         gravity = -(2 * jumpHeight) / Mathf.Pow(timeToJumpApex, 2);
         jumpForce = Mathf.Abs(gravity) * timeToJumpApex;
     }
 
     void Update()
     {
+        // 1. 입력 받기
         moveInput = Input.GetAxisRaw("Horizontal");
 
-        // 점프 시도: isGrounded가 아니라 canJump 변수를 확인
-        if (Input.GetButtonDown("Jump") && canJump)
+        // 2. 코요테 타임 계산 (핵심 로직)
+        if (isGroundDetected)
         {
-            velocity = rb.linearVelocity; // 현재 속도 갱신
-            velocity.y = jumpForce;
-            rb.linearVelocity = velocity;
+            // 땅에 있으면 타이머를 계속 0.2초로 리필
+            coyoteTimeCounter = coyoteTime;
+        }
+        else
+        {
+            // 땅에서 떨어지면 시간 깎기 시작
+            coyoteTimeCounter -= Time.deltaTime;
         }
 
-        // 점프 컷
+        // 3. 점프 시도
+        // 조건: 점프 키를 눌렀고 + 코요테 타임이 남아있다면
+        if (Input.GetButtonDown("Jump"))
+        {
+            if (coyoteTimeCounter > 0f)
+            {
+                velocity = rb.linearVelocity;
+                velocity.y = jumpForce; // 강제로 상승 속도 주입
+                rb.linearVelocity = velocity;
+
+                // [중요] 점프했으면 유예 시간 즉시 삭제 (더블 점프 방지)
+                coyoteTimeCounter = 0f; 
+            }
+        }
+
+        // 4. 점프 컷 (숏 점프)
         if (Input.GetButtonUp("Jump") && rb.linearVelocity.y > 0)
         {
             velocity = rb.linearVelocity;
@@ -76,13 +98,13 @@ public class Player_Controller2D : MonoBehaviour
 
     void FixedUpdate()
     {
-        // 1. 바닥 감지 (점프 가능 여부만 판단, 멈추는 기능 없음!)
+        // 1. 바닥 감지 (Raycast) -> 결과는 isGroundDetected에 저장
         CheckGroundStatus();
 
         // 2. 속도 가져오기
         velocity = rb.linearVelocity;
 
-        // 3. 수평 이동 계산
+        // 3. 수평 이동
         float targetSpeed = moveInput * maxSpeed;
         float accelRate;
 
@@ -93,14 +115,8 @@ public class Player_Controller2D : MonoBehaviour
 
         velocity.x = Mathf.MoveTowards(velocity.x, targetSpeed, accelRate * Time.fixedDeltaTime);
 
-
-        // 4. 수직 이동 (중력 적용)
-        // [수정됨] 땅이든 아니든 일단 중력을 계속 적용합니다.
-        // 땅에 닿으면 BoxCollider가 알아서 더 이상 못 내려가게 막아줍니다.ㅇ
-        
+        // 4. 수직 이동 (중력)
         float currentGravity = gravity;
-        
-        // 떨어질 때만 중력을 세게 받음
         if (velocity.y < 0) currentGravity *= fallGravityMult;
 
         velocity.y += currentGravity * Time.fixedDeltaTime;
@@ -110,34 +126,23 @@ public class Player_Controller2D : MonoBehaviour
         rb.linearVelocity = velocity;
     }
 
-    // 3방향 레이캐스트 로직
     private void CheckGroundStatus()
     {
-        // 박스 콜라이더의 경계값 가져오기
         Bounds bounds = boxCol.bounds;
-
-        // 레이저 쏠 시작 높이 (발바닥보다 아주 살짝 위)
         float yOrigin = bounds.min.y + 0.05f; 
-        
-        // 레이저 쏠 X 좌표 3개 (좌측, 중앙, 우측)
-        // rayInset을 줘서 모서리 끝보다 살짝 안쪽에서 쏘게 함 (벽에 비비다 점프되는 버그 방지)
         float xLeft = bounds.min.x + rayInset;
         float xRight = bounds.max.x - rayInset;
         float xCenter = bounds.center.x;
-
-        // 실제 검사할 거리 (시작점에서 발바닥까지 거리 + 추가 여유분)
         float checkDist = 0.05f + rayLength;
 
-        // 3발 발사
         RaycastHit2D hitL = Physics2D.Raycast(new Vector2(xLeft, yOrigin), Vector2.down, checkDist, groundLayer);
         RaycastHit2D hitC = Physics2D.Raycast(new Vector2(xCenter, yOrigin), Vector2.down, checkDist, groundLayer);
         RaycastHit2D hitR = Physics2D.Raycast(new Vector2(xRight, yOrigin), Vector2.down, checkDist, groundLayer);
 
-        // 셋 중 하나라도 바닥에 닿으면 점프 가능
-        canJump = (hitL.collider != null || hitC.collider != null || hitR.collider != null);
+        // 땅 감지 여부 갱신
+        isGroundDetected = (hitL.collider != null || hitC.collider != null || hitR.collider != null);
     }
 
-    // 에디터에서 레이저 눈으로 확인하기
     private void OnDrawGizmos()
     {
         if (boxCol == null) return;
@@ -149,8 +154,8 @@ public class Player_Controller2D : MonoBehaviour
         float xRight = bounds.max.x - rayInset;
         float xCenter = bounds.center.x;
 
-        // canJump 상태에 따라 색깔 변경 (닿으면 초록, 아니면 빨강)
-        Gizmos.color = canJump ? Color.green : Color.red;
+        // 땅 감지되면 초록, 아니면 빨강
+        Gizmos.color = isGroundDetected ? Color.green : Color.red;
 
         Gizmos.DrawLine(new Vector2(xLeft, yOrigin), new Vector2(xLeft, yOrigin - checkDist));
         Gizmos.DrawLine(new Vector2(xCenter, yOrigin), new Vector2(xCenter, yOrigin - checkDist));
