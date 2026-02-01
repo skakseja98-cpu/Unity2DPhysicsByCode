@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(BoxCollider2D))]
@@ -20,26 +21,33 @@ public class Player_Controller2D : MonoBehaviour
     public float fallGravityMult = 1.5f;
     public float jumpCutMult = 0.5f;
 
-    [Header("Coyote Time (New!)")]
-    public float coyoteTime = 0.2f;    // 떨어져도 점프 가능한 유예 시간 (초)
-    private float coyoteTimeCounter;   // 실제 타이머
+    [Header("Coyote Time")]
+    public float coyoteTime = 0.2f;
+    private float coyoteTimeCounter;
 
-    [Header("Ground Detection (Logic)")]
+    [Header("Dash (New!)")]
+    public float dashSpeed = 20f;      // 대쉬 속도
+    public float dashDuration = 0.2f;  // 대쉬 지속 시간
+    public float dashCooldown = 0.5f;  // 대쉬 쿨타임
+    private bool isDashing;            // 현재 대쉬 중인가?
+    private float dashTimeLeft;        // 대쉬 남은 시간
+    private float lastDashTime = -10f; // 마지막 대쉬 시점
+    private Vector2 dashDir;           // 대쉬 방향 저장용
+
+    [Header("Ground Detection")]
     public LayerMask groundLayer;
     public float rayLength = 0.1f;
     public float rayInset = 0.05f;
-
-    // 땅 감지 여부 (Raycast 결과)
-    [SerializeField]
-    private bool isGroundDetected; // 변수명 명확화를 위해 변경 (기존 canJump)
+    [SerializeField] private bool isGroundDetected;
 
     private Rigidbody2D rb;
     private BoxCollider2D boxCol;
     
     private Vector2 velocity;
-    private float moveInput;
+    private Vector2 inputVector; // X, Y 입력 통합
     private float gravity;
     private float jumpForce;
+    private int facingDirection = 1; // 1: 오른쪽, -1: 왼쪽
 
     void Awake()
     {
@@ -57,37 +65,44 @@ public class Player_Controller2D : MonoBehaviour
 
     void Update()
     {
-        // 1. 입력 받기
-        moveInput = Input.GetAxisRaw("Horizontal");
+        // 1. 입력 받기 (X, Y 모두 받음)
+        float inputX = Input.GetAxisRaw("Horizontal");
+        float inputY = Input.GetAxisRaw("Vertical"); // W, S 키
+        inputVector = new Vector2(inputX, inputY);
 
-        // 2. 코요테 타임 계산 (핵심 로직)
-        if (isGroundDetected)
+        // 2. 바라보는 방향 갱신 (입력이 있을 때만 바꿈)
+        if (inputX != 0)
         {
-            // 땅에 있으면 타이머를 계속 0.2초로 리필
-            coyoteTimeCounter = coyoteTime;
-        }
-        else
-        {
-            // 땅에서 떨어지면 시간 깎기 시작
-            coyoteTimeCounter -= Time.deltaTime;
+            facingDirection = (int)Mathf.Sign(inputX);
+            // 필요하다면 여기서 스프라이트 좌우 반전(Flip) 코드 추가
+            // transform.localScale = new Vector3(facingDirection, 1, 1);
         }
 
-        // 3. 점프 시도
-        // 조건: 점프 키를 눌렀고 + 코요테 타임이 남아있다면
-        if (Input.GetButtonDown("Jump"))
+        // 3. 대쉬 입력 처리
+        // 쿨타임 지났는지 확인
+        if (Input.GetButtonDown("Dash") && Time.time >= lastDashTime + dashCooldown)
         {
-            if (coyoteTimeCounter > 0f)
-            {
-                velocity = rb.linearVelocity;
-                velocity.y = jumpForce; // 강제로 상승 속도 주입
-                rb.linearVelocity = velocity;
-
-                // [중요] 점프했으면 유예 시간 즉시 삭제 (더블 점프 방지)
-                coyoteTimeCounter = 0f; 
-            }
+            StartDash();
         }
 
-        // 4. 점프 컷 (숏 점프)
+        // --- 대쉬 중이면 아래 로직(점프, 코요테) 무시하거나, 대쉬 캔슬 점프를 구현할 수도 있음 ---
+        // 여기서는 심플하게 대쉬 중에도 점프 로직은 돌리되, 물리 적용에서 우선순위를 둡니다.
+
+        // 4. 코요테 타임 & 점프
+        if (isGroundDetected) coyoteTimeCounter = coyoteTime;
+        else coyoteTimeCounter -= Time.deltaTime;
+
+        if (Input.GetButtonDown("Jump") && coyoteTimeCounter > 0f)
+        {
+            // 대쉬 중에 점프하면? -> 대쉬 캔슬 점프 (선택 사항)
+            isDashing = false; // 점프하는 순간 대쉬 종료
+
+            velocity = rb.linearVelocity;
+            velocity.y = jumpForce;
+            rb.linearVelocity = velocity;
+            coyoteTimeCounter = 0f;
+        }
+
         if (Input.GetButtonUp("Jump") && rb.linearVelocity.y > 0)
         {
             velocity = rb.linearVelocity;
@@ -96,33 +111,87 @@ public class Player_Controller2D : MonoBehaviour
         }
     }
 
+    IEnumerator StopTime(float duration)
+{
+    // 1. 시간 멈춤
+    Time.timeScale = 0f; 
+    
+    // 2. 현실 시간(Realtime) 기준으로 0.1초 대기
+    // (그냥 WaitForSeconds를 쓰면 게임 시간이 멈춰서 영원히 안 깨어남)
+    yield return new WaitForSecondsRealtime(duration); 
+    
+    // 3. 시간 복구
+    Time.timeScale = 1f; 
+}
+
+    void StartDash()
+    {
+        isDashing = true;
+        dashTimeLeft = dashDuration;
+        lastDashTime = Time.time;
+
+        StartCoroutine(StopTime(0.07f)); // 시간정지
+
+        // 대쉬 방향 계산
+        // 입력이 없으면(0,0) -> 바라보는 방향으로
+        if (inputVector == Vector2.zero)
+        {
+            dashDir = new Vector2(facingDirection, 0);
+        }
+        else
+        {
+            // 입력이 있으면 정규화(Normalize)해서 대각선도 속도 일정하게
+            dashDir = inputVector.normalized;
+        }
+    }
+
     void FixedUpdate()
     {
-        // 1. 바닥 감지 (Raycast) -> 결과는 isGroundDetected에 저장
-        CheckGroundStatus();
+        // 0. 대쉬 처리 (최우선 순위)
+        if (isDashing)
+        {
+            // 대쉬 지속 시간 체크
+            if (dashTimeLeft > 0)
+            {
+                // 중력 무시, 가속 무시. 오직 대쉬 방향으로 꽂음
+                rb.linearVelocity = dashDir * dashSpeed;
+                dashTimeLeft -= Time.fixedDeltaTime;
+                
+                // 대쉬 중에는 바닥 체크나 다른 로직 수행 안 함 (바로 리턴)
+                return; 
+            }
+            else
+            {
+                // 대쉬 끝
+                isDashing = false;
+                // 대쉬 끝나면 속도를 약간 줄여줄지, 그대로 관성 유지할지는 선택 (여기선 관성 유지)
+                rb.linearVelocity = dashDir * maxSpeed; // 대쉬 끝났으니 최대 달리기 속도로 맞춰줌 (자연스러운 감속)
+            }
+        }
 
-        // 2. 속도 가져오기
+
+        // --- 아래는 일반 이동(Run & Gravity) 로직 ---
+
+        CheckGroundStatus();
         velocity = rb.linearVelocity;
 
-        // 3. 수평 이동
-        float targetSpeed = moveInput * maxSpeed;
+        // 수평 이동
+        float targetSpeed = inputVector.x * maxSpeed;
         float accelRate;
-
-        if (moveInput != 0)
-            accelRate = (Mathf.Sign(moveInput) != Mathf.Sign(velocity.x) && Mathf.Abs(velocity.x) > 0.1f) ? turnSpeed : acceleration;
+        if (inputVector.x != 0)
+            accelRate = (Mathf.Sign(inputVector.x) != Mathf.Sign(velocity.x) && Mathf.Abs(velocity.x) > 0.1f) ? turnSpeed : acceleration;
         else
             accelRate = deceleration;
 
         velocity.x = Mathf.MoveTowards(velocity.x, targetSpeed, accelRate * Time.fixedDeltaTime);
 
-        // 4. 수직 이동 (중력)
+        // 수직 이동 (중력)
         float currentGravity = gravity;
         if (velocity.y < 0) currentGravity *= fallGravityMult;
 
         velocity.y += currentGravity * Time.fixedDeltaTime;
         velocity.y = Mathf.Max(velocity.y, -maxFallSpeed);
 
-        // 5. 최종 적용
         rb.linearVelocity = velocity;
     }
 
@@ -130,16 +199,16 @@ public class Player_Controller2D : MonoBehaviour
     {
         Bounds bounds = boxCol.bounds;
         float yOrigin = bounds.min.y + 0.05f; 
+        float checkDist = 0.05f + rayLength;
         float xLeft = bounds.min.x + rayInset;
         float xRight = bounds.max.x - rayInset;
         float xCenter = bounds.center.x;
-        float checkDist = 0.05f + rayLength;
 
         RaycastHit2D hitL = Physics2D.Raycast(new Vector2(xLeft, yOrigin), Vector2.down, checkDist, groundLayer);
         RaycastHit2D hitC = Physics2D.Raycast(new Vector2(xCenter, yOrigin), Vector2.down, checkDist, groundLayer);
         RaycastHit2D hitR = Physics2D.Raycast(new Vector2(xRight, yOrigin), Vector2.down, checkDist, groundLayer);
 
-        // 땅 감지 여부 갱신
+
         isGroundDetected = (hitL.collider != null || hitC.collider != null || hitR.collider != null);
     }
 
@@ -160,5 +229,6 @@ public class Player_Controller2D : MonoBehaviour
         Gizmos.DrawLine(new Vector2(xLeft, yOrigin), new Vector2(xLeft, yOrigin - checkDist));
         Gizmos.DrawLine(new Vector2(xCenter, yOrigin), new Vector2(xCenter, yOrigin - checkDist));
         Gizmos.DrawLine(new Vector2(xRight, yOrigin), new Vector2(xRight, yOrigin - checkDist));
+        Gizmos.DrawRay(transform.position, Vector3.right * facingDirection * 1.5f);
     }
 }
