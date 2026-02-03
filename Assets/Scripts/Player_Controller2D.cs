@@ -38,7 +38,7 @@ public class Player_Controller2D : MonoBehaviour
     public LayerMask groundLayer;
     public float rayLength = 0.1f;
     public float rayInset = 0.05f;
-    [SerializeField] private bool isGroundDetected;
+    public bool isGroundDetected;
 
     private Rigidbody2D rb;
     private BoxCollider2D boxCol;
