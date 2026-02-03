@@ -181,12 +181,13 @@ Transform:
   m_GameObject: {fileID: 86443574}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -16.86, y: -6.65, z: 0}
+  m_LocalPosition: {x: -11.02, y: -2.38, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1268815202}
   - {fileID: 519420032}
+  - {fileID: 908192143}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &86443577
@@ -10448,15 +10449,17 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Rope2D
   startPoint: {fileID: 908192143}
-  segmentCount: 15
+  segmentCount: 40
   ropeLength: 5
   gravity: -40
   constraintIterations: 20
+  bendingStiffness: 1.5
   groundMask:
     serializedVersion: 2
     m_Bits: 64
-  ropeRadius: 0.1
+  ropeRadius: 0.2
   friction: 0.5
+  damping: 0.9
 --- !u!120 &908192142
 LineRenderer:
   serializedVersion: 3
@@ -10483,7 +10486,7 @@ LineRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 10754, guid: 0000000000000000f000000000000000, type: 0}
+  - {fileID: 2100000, guid: 18a0c44da63867f479351e1b1c262a4f, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -10511,13 +10514,13 @@ LineRenderer:
   - {x: 0, y: 0, z: 1}
   m_Parameters:
     serializedVersion: 3
-    widthMultiplier: 0.5
+    widthMultiplier: 2
     widthCurve:
       serializedVersion: 2
       m_Curve:
       - serializedVersion: 3
         time: 0
-        value: 0.5448761
+        value: 1
         inSlope: 0
         outSlope: 0
         tangentMode: 0
@@ -10560,8 +10563,8 @@ LineRenderer:
     numCornerVertices: 0
     numCapVertices: 0
     alignment: 0
-    textureMode: 0
-    textureScale: {x: 1, y: 1}
+    textureMode: 3
+    textureScale: {x: 0.03, y: 1}
     shadowBias: 0.5
     generateLightingData: 0
   m_UseWorldSpace: 1
@@ -10575,12 +10578,12 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 908192140}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -15.95, y: -3.01, z: 0}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 86443576}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!68 &908192144
 EdgeCollider2D:
@@ -17457,4 +17460,3 @@ SceneRoots:
   - {fileID: 112984307}
   - {fileID: 605678025}
   - {fileID: 806064551}
-  - {fileID: 908192143}

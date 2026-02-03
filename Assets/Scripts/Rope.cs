@@ -13,12 +13,21 @@ public class VerletRope2D : MonoBehaviour
     [Header("시뮬레이션 정밀도")]
     [Range(1, 50)]
     public int constraintIterations = 20; 
+    // [신규] 로프의 빳빳함을 조절하는 변수 추가
+    [Range(0f, 2f)]
+    public float bendingStiffness = 1.0f; // 0 = 부드러움(잘 접힘), 2 = 강철 막대기처럼 빳빳함
 
     // [신규] 충돌 설정
     [Header("충돌 설정")]
     public LayerMask groundMask; // 인스펙터에서 'Ground' 레이어를 선택하세요.
     public float ropeRadius = 0.1f; // 로프의 두께 (지형에 파고드는 깊이 방지용)
     public float friction = 0.5f;   // 바닥에 닿았을 때 미끄러짐 방지용 마찰력 (0~1)
+
+    [Header("물리 저항 설정")]
+    [Range(0.8f, 1.0f)]
+    public float damping = 0.95f; // 공기 저항 (1 = 저항 없음, 0.8 = 매우 무거움)
+
+    
 
     private LineRenderer lineRenderer;
     private EdgeCollider2D edgeCollider; // 콜라이더 변수 추가
@@ -116,7 +125,7 @@ public class VerletRope2D : MonoBehaviour
 
             // 1) 다음 프레임에 이동할 위치를 미리 계산
             Vector2 velocity = node.position - node.oldPosition;
-            Vector2 nextPosition = node.position + velocity + gravityVector * (dt * dt);
+            Vector2 nextPosition = node.position + (velocity * damping)+ gravityVector * (dt * dt);
 
             // 2) 현재 위치에서 다음 위치로 가는 길목에 'Ground'가 있는지 검사 (CircleCast)
             Vector2 direction = nextPosition - node.position;
@@ -163,6 +172,31 @@ public class VerletRope2D : MonoBehaviour
                 Vector2 correction = (direction / currentDistance) * error * 0.5f;
                 if (!nodeA.isLocked) nodeA.position += correction;
                 if (!nodeB.isLocked) nodeB.position -= correction;
+            }
+        }
+
+
+        if (bendingStiffness > 0f)
+        {
+            for (int i = 0; i < segmentCount - 2; i++) 
+            {
+                RopeNode nodeA = nodes[i];
+                RopeNode nodeB = nodes[i + 2]; 
+
+                Vector2 direction = nodeB.position - nodeA.position;
+                float currentDistance = direction.magnitude;
+                
+                // bendingStiffness 값에 따라 최소 유지 거리가 동적으로 변함
+                float minBendDistance = segmentLength * bendingStiffness; 
+
+                if (currentDistance < minBendDistance && currentDistance > 0.0001f)
+                {
+                    float error = currentDistance - minBendDistance;
+                    Vector2 correction = (direction / currentDistance) * error * 0.5f;
+
+                    if (!nodeA.isLocked) nodeA.position += correction;
+                    if (!nodeB.isLocked) nodeB.position -= correction;
+                }
             }
         }
     }
