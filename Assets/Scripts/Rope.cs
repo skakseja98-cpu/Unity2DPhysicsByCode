@@ -26,6 +26,7 @@ public class VerletRope2D : MonoBehaviour
     [Header("물리 저항 설정")]
     [Range(0.8f, 1.0f)]
     public float damping = 0.95f; // 공기 저항 (1 = 저항 없음, 0.8 = 매우 무거움)
+    
 
     
 
@@ -52,24 +53,14 @@ public class VerletRope2D : MonoBehaviour
 
     void Start()
     {
-        lineRenderer = GetComponent<LineRenderer>();
-        edgeCollider = GetComponent<EdgeCollider2D>(); // 초기화
-        edgeCollider.isTrigger = true; // 플레이어가 통과하며 감지해야 하므로 Trigger 체크
-
-        lineRenderer.positionCount = segmentCount;
-        segmentLength = ropeLength / (segmentCount - 1);
-
-        Vector2 startPos = startPoint != null ? (Vector2)startPoint.position : (Vector2)transform.position;
-        for (int i = 0; i < segmentCount; i++)
-        {
-            nodes.Add(new RopeNode(startPos + Vector2.down * (segmentLength * i)));
-        }
-
-        nodes[0].isLocked = true;
+        
     }
 
     void FixedUpdate()
     {
+        // [추가된 방어 코드] 점(Node)이 아직 생성되지 않았다면 아무것도 하지 않고 돌아갑니다.
+        if (nodes.Count == 0) return; 
+
         // 1. 기본 물리 이동
         SimulatePhysics(Time.fixedDeltaTime);
         
@@ -84,6 +75,35 @@ public class VerletRope2D : MonoBehaviour
 
         UpdateRopeGraphics();
         UpdateRopeCollider(); 
+    }
+
+    public void InitializeGrapple(Vector2 anchorPoint, Vector2 playerPosition)
+    {
+        lineRenderer = GetComponent<LineRenderer>();
+        edgeCollider = GetComponent<EdgeCollider2D>();
+        edgeCollider.isTrigger = true;
+
+        nodes.Clear();
+
+        // 1. 플레이어와 천장 사이의 거리 측정
+        float distance = Vector2.Distance(playerPosition, anchorPoint);
+        ropeLength = distance;
+
+        // 2. 거리에 비례해서 마디(Segment) 개수를 적절히 배분 (예: 0.5 유닛당 마디 1개)
+        segmentCount = Mathf.Max(3, Mathf.CeilToInt(distance / 0.5f));
+        segmentLength = distance / (segmentCount - 1);
+        lineRenderer.positionCount = segmentCount;
+
+        // 3. 천장에서 플레이어까지의 각도를 따라 일직선으로 점들을 생성
+        for (int i = 0; i < segmentCount; i++)
+        {
+            // Lerp를 사용하여 anchorPoint(0)와 playerPosition(1) 사이를 비율에 맞춰 나눔
+            Vector2 nodePos = Vector2.Lerp(anchorPoint, playerPosition, (float)i / (segmentCount - 1));
+            nodes.Add(new RopeNode(nodePos));
+        }
+
+        // [핵심] 천장에 박힌 첫 번째 점만 고정하고 나머지는 자유롭게 둠
+        nodes[0].isLocked = true; 
     }
 
     private void ResolveCollisions()
@@ -224,21 +244,39 @@ public class VerletRope2D : MonoBehaviour
         edgeCollider.SetPoints(colliderPoints);
     }
     
-    // 플레이어가 로프의 특정 위치(월드 좌표)와 가장 가까운 점을 찾을 때 사용하는 함수
-    public Vector2 GetClosestPointOnRope(Vector2 playerPos)
+    // [수정됨] 플레이어와 가장 가까운 로프 마디의 인덱스(번호)를 반환
+    public int GetClosestNodeIndex(Vector2 playerPos)
     {
-        Vector2 closestPoint = nodes[0].position;
-        float minDistance = Vector2.Distance(playerPos, closestPoint);
+        int closestIndex = 0;
+        float minDistance = Vector2.Distance(playerPos, nodes[0].position);
 
-        foreach (var node in nodes)
+        for (int i = 1; i < segmentCount; i++)
         {
-            float dist = Vector2.Distance(playerPos, node.position);
+            float dist = Vector2.Distance(playerPos, nodes[i].position);
             if (dist < minDistance)
             {
                 minDistance = dist;
-                closestPoint = node.position;
+                closestIndex = i;
             }
         }
-        return closestPoint;
+        return closestIndex;
+    }
+
+    // [신규] 특정 인덱스의 마디 위치를 반환 (플레이어가 매달릴 때 사용)
+    public Vector2 GetNodePosition(int index)
+    {
+        index = Mathf.Clamp(index, 0, segmentCount - 1);
+        return nodes[index].position;
+    }
+
+    // [신규] 특정 마디(Node)에 힘(Force)을 가해 로프를 흔드는 함수
+    public void AddForceToNode(int index, Vector2 force)
+    {
+        // 범위를 벗어나거나 고정된 점(천장)이면 힘을 가하지 않음
+        if (index <= 0 || index >= segmentCount - 1 || nodes[index].isLocked) return;
+
+        // 베를레 적분에서 가속도를 주는 방법: '과거 위치'를 반대 방향으로 밀어버리면,
+        // 다음 프레임에서 '현재 위치 - 과거 위치' 계산 시 속도가 확 증가함
+        nodes[index].oldPosition -= force;
     }
 }

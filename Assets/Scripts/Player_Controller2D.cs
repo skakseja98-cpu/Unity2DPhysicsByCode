@@ -40,6 +40,20 @@ public class Player_Controller2D : MonoBehaviour
     public float rayInset = 0.05f;
     public bool isGroundDetected;
 
+    [Header("Climbing (Rope)")]
+    public float climbSpeed = 5f; // 로프 오르내리는 속도
+    private bool isClimbing;      // 현재 로프를 타고 있는지 여부
+    private bool isNearRope;      // 로프와 겹쳐 있는지 여부
+    private VerletRope2D currentRope; // 현재 닿아있는 로프
+    private float currentClimbIndex;  // 현재 매달린 로프의 마디 위치 (소수점 포함)
+    public float swingForce = 0.5f; // [추가] 로프를 좌우로 흔드는 힘
+
+    [Header("Grappling Hook")]
+    public GameObject ropePrefab;       // [필수] 프로젝트 창에 만든 로프 프리팹을 넣을 칸
+    public float maxGrappleDistance = 15f; // 훅이 닿는 최대 사거리
+    public LineRenderer aimLine; // [추가] 조준할 때 보여줄 궤적 선
+    
+
     private Rigidbody2D rb;
     private BoxCollider2D boxCol;
     
@@ -103,6 +117,38 @@ public class Player_Controller2D : MonoBehaviour
             velocity.y *= jumpCutMult;
             rb.linearVelocity = velocity;
         }
+
+        // [추가: 로프 등반] --------------------------------------------------
+        // 1. 로프 근처에서 [위] 방향키를 누르면 매달리기 시작
+        if (isNearRope && !isClimbing && inputY > 0.1f)
+        {
+            AttachToRope();
+        }
+
+        // 2. 매달린 상태에서의 조작
+        if (isClimbing)
+        {
+            if (Input.GetButtonDown("Jump")) DetachFromRope();
+
+            currentClimbIndex -= inputY * climbSpeed * Time.deltaTime; 
+            currentClimbIndex = Mathf.Clamp(currentClimbIndex, 0, currentRope.segmentCount - 1);
+            
+            // [신규] 좌우(A/D) 키를 누르면 플레이어가 매달린 노드에 힘을 가함 (로프 흔들기)
+            if (inputX != 0)
+            {
+                int currentNode = Mathf.RoundToInt(currentClimbIndex);
+                currentRope.AddForceToNode(currentNode, new Vector2(inputX * swingForce * Time.fixedDeltaTime, 0));
+            }
+
+            coyoteTimeCounter = 0; 
+            isDashing = false;
+        }
+        else if (isNearRope && inputY > 0.1f) // 매달려있지 않을 때만 매달리기 가능
+        {
+            AttachToRope();
+        }
+
+        HandleAimAndShoot();
     }
 
     IEnumerator StopTime(float duration)
@@ -138,6 +184,24 @@ public class Player_Controller2D : MonoBehaviour
                 isDashing = false;
                 rb.linearVelocity = dashDir * maxSpeed;
             }
+        }
+
+        // [추가: 로프 등반] 매달려 있을 때는 일반 물리를 무시하고 로프 위치를 따라감
+        if (isClimbing)
+        {
+            // 현재 소수점 인덱스를 기준으로 위쪽 마디(A)와 아래쪽 마디(B)를 찾음
+            int nodeA = Mathf.FloorToInt(currentClimbIndex);
+            int nodeB = Mathf.CeilToInt(currentClimbIndex);
+            float t = currentClimbIndex - nodeA; // 두 마디 사이의 비율 (0 ~ 1)
+
+            // 두 마디 사이의 위치를 부드럽게 보간(Lerp)
+            Vector2 posA = currentRope.GetNodePosition(nodeA);
+            Vector2 posB = currentRope.GetNodePosition(nodeB);
+            rb.position = Vector2.Lerp(posA, posB, t);
+
+            // 속도를 0으로 만들어 중력의 영향을 받지 않게 함
+            rb.linearVelocity = Vector2.zero;
+            return; // <--- 중요: 여기서 끊어야 아래의 일반 이동/중력 코드가 실행되지 않음
         }
 
         CheckGroundStatus();
@@ -207,5 +271,95 @@ public class Player_Controller2D : MonoBehaviour
         Gizmos.DrawLine(new Vector2(xCenter, yOrigin), new Vector2(xCenter, yOrigin - checkDist));
         Gizmos.DrawLine(new Vector2(xRight, yOrigin), new Vector2(xRight, yOrigin - checkDist));
         Gizmos.DrawRay(transform.position, Vector3.right * facingDirection * 1.5f);
+    }
+
+    // [추가: 로프 등반 함수들] --------------------------------------------------
+    private void AttachToRope()
+    {
+        isClimbing = true;
+        // 플레이어 위치에서 가장 가까운 로프 마디 번호를 찾아 매달림
+        currentClimbIndex = currentRope.GetClosestNodeIndex(transform.position); 
+    }
+
+    private void DetachFromRope()
+    {
+        isClimbing = false;
+        // 로프에서 떨어질 때 살짝 위로 튀어오르는 힘을 줌
+        velocity = rb.linearVelocity;
+        velocity.y = jumpForce * 0.5f; 
+        rb.linearVelocity = velocity;
+    }
+
+    // 로프(EdgeCollider2D - Trigger)에 닿았을 때 감지
+    private void OnTriggerEnter2D(Collider2D col)
+    {
+        if (col.TryGetComponent<VerletRope2D>(out VerletRope2D rope))
+        {
+            isNearRope = true;
+            currentRope = rope;
+        }
+    }
+
+    // 로프에서 멀어졌을 때
+    private void OnTriggerExit2D(Collider2D col)
+    {
+        if (col.GetComponent<VerletRope2D>() == currentRope)
+        {
+            isNearRope = false;
+            if (!isClimbing) currentRope = null; // 매달려있지 않을 때만 로프 정보 삭제
+        }
+    }
+
+    private void HandleAimAndShoot()
+    {
+        // 1. [제한사항] 로프를 타고 있을 때는 조준/발사 불가능
+        if (isClimbing)
+        {
+            if (aimLine != null) aimLine.enabled = false;
+            return;
+        }
+
+        // 2. 마우스 우클릭을 "누르고 있는 동안" 조준 모드 활성화
+        if (Input.GetMouseButton(1)) 
+        {
+            if (aimLine != null) aimLine.enabled = true; // 조준선 켜기
+
+            Vector2 mousePos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
+            Vector2 direction = (mousePos - (Vector2)transform.position).normalized;
+
+            // 벽 감지
+            RaycastHit2D hit = Physics2D.Raycast(transform.position, direction, maxGrappleDistance, groundLayer);
+            
+            // 벽에 닿았으면 닿은 곳까지, 안 닿았으면 최대 사거리까지 조준선 끝점 설정
+            Vector2 endPoint = hit.collider != null ? hit.point : (Vector2)transform.position + direction * maxGrappleDistance;
+
+            // 조준선(LineRenderer) 그리기 (초록색 등으로 설정 추천)
+            if (aimLine != null)
+            {
+                aimLine.SetPosition(0, transform.position); // 시작점: 플레이어
+                aimLine.SetPosition(1, endPoint);           // 끝점: 벽 또는 허공
+            }
+
+            // 3. 조준 중일 때 마우스 좌클릭 + 벽에 닿았을 때만 로프 발사
+            if (Input.GetMouseButtonDown(0) && hit.collider != null)
+            {
+                ShootRope(hit.point);
+            }
+        }
+        else // 우클릭을 떼면 조준 모드 해제
+        {
+            if (aimLine != null) aimLine.enabled = false; // 조준선 끄기
+        }
+    }
+
+    // [수정] 조준선이 가리키는 정확한 좌표(hitPoint)로 로프를 생성
+    private void ShootRope(Vector2 hitPoint)
+    {
+        if (currentRope != null) Destroy(currentRope.gameObject); 
+
+        GameObject newRopeObj = Instantiate(ropePrefab, hitPoint, Quaternion.identity);
+        VerletRope2D newRope = newRopeObj.GetComponent<VerletRope2D>();
+
+        newRope.InitializeGrapple(hitPoint, transform.position);
     }
 }
