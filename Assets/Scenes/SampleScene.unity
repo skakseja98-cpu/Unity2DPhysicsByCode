@@ -410,6 +410,7 @@ MonoBehaviour:
   pullInitSpeed: 5
   pullMaxSpeed: 35
   pullAccelDuration: 0.7
+  retractionCooldown: 0.5
   releaseVelocityMult: 1.1
   releaseUpwardForce: 10
 --- !u!114 &86443583
@@ -444,8 +445,8 @@ MonoBehaviour:
   acceleration: 25
   deceleration: 40
   turnSpeed: 80
-  jumpHeight: 3.8
-  timeToJumpApex: 0.4
+  jumpHeight: 4
+  timeToJumpApex: 0.35
   maxFallSpeed: 17
   fallGravityMult: 1.1
   jumpCutMult: 0.5

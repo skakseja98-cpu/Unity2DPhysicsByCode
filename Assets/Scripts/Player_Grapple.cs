@@ -13,6 +13,7 @@ public class Player_Grapple : MonoBehaviour
     public float pullInitSpeed = 5f;
     public float pullMaxSpeed = 25f;
     public float pullAccelDuration = 1.0f;
+    public float retractionCooldown = 0.5f;
     
     [Header("Release Boost")]
     public float releaseVelocityMult = 1.2f;
@@ -31,6 +32,7 @@ public class Player_Grapple : MonoBehaviour
 
     // [추가] 현재 중력 스케일 저장용 변수
     private float currentGravityScale = 1f;
+    private float nextRetractTime = 0f;
 
     private bool isGhostMode;
     private int playerLayer;
@@ -134,7 +136,8 @@ public class Player_Grapple : MonoBehaviour
 
     private void ApplyRetraction(bool isHeld)
     {
-        if (isHeld)
+        // G키를 누르고 있고, 쿨타임이 지났다면 당기기 실행
+        if (isHeld && Time.time >= nextRetractTime)
         {
             float standOffset = boxCol.bounds.extents.y;
             Vector2 targetPos = anchorPos + Vector2.up * standOffset;
@@ -142,7 +145,12 @@ public class Player_Grapple : MonoBehaviour
             
             if (toTarget.magnitude > 0.1f)
             {
+                
                 pullTimer += Time.fixedDeltaTime;
+                // lastPullTime 관련 로직이 원본에 있었으나 현재 스크립트엔 변수 선언이 안보여서
+                // 만약 에러나면 lastPullTime 관련 줄은 지우셔도 됩니다. 
+                // (위 파일 내용엔 lastPullTime 선언이 없어서 pullTimer 로직만 남깁니다)
+
                 float t = Mathf.Clamp01(pullTimer / pullAccelDuration);
                 float speed = Mathf.Lerp(pullInitSpeed, pullMaxSpeed, t);
                 
@@ -154,6 +162,12 @@ public class Player_Grapple : MonoBehaviour
         }
         else
         {
+            // [수정] 키를 뗐을 때, 이전에 당기고 있었다면(pullTimer > 0) 쿨타임 적용 시작
+            if (pullTimer > 0f)
+            {
+                nextRetractTime = Time.time + retractionCooldown;
+            }
+            
             pullTimer = 0f;
         }
     }
