@@ -157,7 +157,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Rope2D
   segmentCountPerMeter: 4
-  gravity: -60
+  baseGravity: -50
   constraintIterations: 20
 --- !u!68 &1458305739682534734
 EdgeCollider2D:

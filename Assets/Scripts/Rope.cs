@@ -2,11 +2,11 @@ using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(LineRenderer))]
-public class Rope2D : MonoBehaviour
+public class Rope : MonoBehaviour
 {
     [Header("Visual Settings")]
-    public int segmentCountPerMeter = 3; // 1미터당 마디 개수 (높을수록 부드러움)
-    public float gravity = -30f;
+    public int segmentCountPerMeter = 3; 
+    public float baseGravity = -30f; // [변경] 원래 gravity였던 것을 baseGravity로 이름 변경
     public int constraintIterations = 10;
     
     private LineRenderer lineRenderer;
@@ -14,6 +14,9 @@ public class Rope2D : MonoBehaviour
     private Transform targetTransform;
     private Vector2 startPos;
     private float segmentLength;
+    
+    // [추가] 현재 적용 중인 중력값
+    private float currentGravity; 
 
     public class RopeNode
     {
@@ -22,15 +25,18 @@ public class Rope2D : MonoBehaviour
         public RopeNode(Vector2 pos) { position = pos; oldPosition = pos; }
     }
 
-    public void InitializeRope(Vector2 anchor, Transform player, float maxLen)
+    // [수정] 파라미터에 float gravityScale 추가됨
+    public void InitializeRope(Vector2 anchor, Transform player, float maxLen, float gravityScale)
     {
         lineRenderer = GetComponent<LineRenderer>();
         startPos = anchor;
         targetTransform = player;
+        
+        // [추가] 초기 중력 설정
+        currentGravity = baseGravity * gravityScale;
 
         nodes.Clear();
         
-        // 초기 생성 시 넉넉하게 마디를 생성 (maxLen 기준)
         int totalSegments = Mathf.CeilToInt(maxLen * segmentCountPerMeter);
         if (totalSegments < 2) totalSegments = 2;
 
@@ -45,12 +51,15 @@ public class Rope2D : MonoBehaviour
         lineRenderer.positionCount = totalSegments;
     }
 
-    // [핵심] 플레이어 컨트롤러에서 호출하여 비주얼 로프 길이를 강제로 줄임
+    // [추가] 게임 도중(우주 진입 등) 중력이 바뀔 때 호출
+    public void SetGravityScale(float scale)
+    {
+        currentGravity = baseGravity * scale;
+    }
+
     public void UpdateRopeLength(float newTotalLength)
     {
         if (nodes.Count < 2) return;
-        
-        // 마디 개수는 유지하되, 마디 간격(segmentLength)을 줄여서 전체 길이를 맞춤
         segmentLength = newTotalLength / (nodes.Count - 1);
     }
 
@@ -78,7 +87,8 @@ public class Rope2D : MonoBehaviour
 
     private void SimulateNodes(float dt)
     {
-        Vector2 gravityVec = new Vector2(0, gravity * dt * dt);
+        // [수정] gravity 대신 currentGravity 사용
+        Vector2 gravityVec = new Vector2(0, currentGravity * dt * dt);
 
         for (int i = 0; i < nodes.Count; i++)
         {
@@ -88,7 +98,6 @@ public class Rope2D : MonoBehaviour
             Vector2 velocity = node.position - node.oldPosition;
             node.oldPosition = node.position;
             
-            // 공기 저항 0.99f
             node.position += velocity * 0.99f + gravityVec;
         }
     }
@@ -106,8 +115,6 @@ public class Rope2D : MonoBehaviour
             Vector2 distVec = nodeB.position - nodeA.position;
             float dist = distVec.magnitude;
 
-            // 줄이 segmentLength보다 길어질 때만 줄임 (Slack 유지)
-            // G키를 눌러 segmentLength가 작아지면, 여기서 자동으로 딸려 올라감
             if (dist > segmentLength)
             {
                 float error = dist - segmentLength;

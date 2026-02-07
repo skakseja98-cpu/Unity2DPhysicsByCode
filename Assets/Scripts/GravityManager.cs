@@ -12,7 +12,7 @@ public class GravityManager : MonoBehaviour
     }
 
     [Header("Settings")]
-    public Player_Controller2D player; // 플레이어 스크립트 연결
+    public Player_Controller player; // 플레이어 스크립트 연결
     public List<GravityStage> gravityStages; // 10단계 설정 리스트
 
     [Header("Debug")]
