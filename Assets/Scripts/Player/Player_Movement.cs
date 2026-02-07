@@ -19,9 +19,21 @@ public class Player_Movement : MonoBehaviour
     public float jumpCutMult = 0.5f;
     
     [Header("Double Jump")]
-    public int maxJumps = 2; // [중요] 이 값이 2인지 꼭 확인하세요!
+    public int maxJumps = 2; 
     public float doubleJumpMultiplier = 0.8f;
-    public float lowGravityJumpBonus = 1.5f;
+
+    [Header("Low Gravity Settings")]
+    [Tooltip("중력이 낮을 때 점프 힘을 얼마나 줄일지 (0=안 줄임, 1=중력비례 완전 감소)")]
+    [Range(0f, 1f)]
+    public float jumpForceScaling = 0.5f;
+
+    [Tooltip("중력이 낮을 때 가속도(미끄러짐)를 얼마나 줄일지 (0=안 미끄러짐, 1=얼음판)")]
+    [Range(0f, 1f)]
+    public float horizontalControlScaling = 0.5f; 
+
+    [Tooltip("중력이 낮을 때 최대 속도를 얼마나 줄일지 (0=속도 유지, 1=중력비례 느려짐)")]
+    [Range(0f, 1f)]
+    public float maxSpeedScaling = 0.5f; // [신규 기능]
 
     [Header("Zero Gravity (Space)")]
     public float zeroGravityMaxSpeed = 15f;
@@ -29,14 +41,14 @@ public class Player_Movement : MonoBehaviour
     public float zeroGravityDrag = 0.5f;
 
     [Header("Zero Gravity Swing")]
-    public float zeroGravitySwingMaxSpeed = 40f; // [추가] 스윙 중 허용되는 최대 속도
-    public float velocityDecayRate = 10f;        // [추가] 줄을 놓은 후 속도가 줄어드는 빠르기
+    public float zeroGravitySwingMaxSpeed = 40f; 
+    public float velocityDecayRate = 10f;        
 
     [Header("Ground Detection")]
     public LayerMask groundLayer;
     public float rayLength = 0.1f;
     public float rayInset = 0.05f;
-    public float coyoteTime = 0.15f; // [수정] 0.1은 너무 짧을 수 있어서 조금 늘림
+    public float coyoteTime = 0.15f;
     
     // 상태 프로퍼티
     public bool IsGrounded { get; private set; }
@@ -83,14 +95,11 @@ public class Player_Movement : MonoBehaviour
         if (IsGrounded) 
         {
             coyoteTimeCounter = coyoteTime;
-            JumpsLeft = maxJumps; // 땅에 있으면 점프 횟수 리필
+            JumpsLeft = maxJumps; 
         }
         else 
         {
             coyoteTimeCounter -= Time.deltaTime;
-
-            // [추가] 코요테 타임이 지났는데 아직 점프 횟수가 꽉 차있다면?
-            // -> 발 헛디뎠으니 1단 점프 기회 박탈 (공중 점프만 가능하게)
             if (coyoteTimeCounter < 0 && JumpsLeft == maxJumps)
             {
                 JumpsLeft--;
@@ -102,37 +111,34 @@ public class Player_Movement : MonoBehaviour
     {
         if (Mathf.Abs(gravityMultiplier) < 0.1f) return;
 
-        // 점프 가능 횟수가 남아있을 때만
         if (JumpsLeft > 0)
         {
             float force = jumpForce;
 
-            // 판정 로직: 땅에 있거나 코요테 타임 안쪽이면 = "1단 점프"
             bool isFirstJump = IsGrounded || coyoteTimeCounter > 0;
 
             if (isFirstJump)
             {
-                // [1단 점프]
-                // 중력이 약할 때 보너스
-                if (gravityMultiplier < 0.9f) force *= lowGravityJumpBonus;
-                
-                // [핵심 수정] 1단 점프를 했으면, 남은 횟수는 무조건 (최대 - 1)로 고정
-                // 이렇게 하면 코요테 타임 때 점프해도 더블 점프 기회가 확실히 보장됨
                 JumpsLeft = maxJumps - 1;
             }
             else
             {
-                // [더블 점프 (공중)]
                 force *= doubleJumpMultiplier;
-                JumpsLeft--; // 횟수 하나 차감
+                JumpsLeft--;
             }
 
-            // 물리 적용
+            // 점프 힘 보정 (Scaling 적용)
+            float gScale = Mathf.Abs(gravityMultiplier);
+            if (gScale < 1f && gScale > 0.01f)
+            {
+                force *= Mathf.Pow(gScale, jumpForceScaling);
+            }
+
             Vector2 vel = rb.linearVelocity;
             vel.y = force;
             rb.linearVelocity = vel;
 
-            coyoteTimeCounter = 0f; // 점프 했으니 코요테 타임 종료
+            coyoteTimeCounter = 0f; 
         }
     }
 
@@ -151,31 +157,51 @@ public class Player_Movement : MonoBehaviour
         if (input.x != 0) FacingDirection = (int)Mathf.Sign(input.x);
 
         if (Mathf.Abs(gravityMultiplier) < 0.1f)
-    {
-        ApplyZeroGravityMovement(input, isSwinging); 
-        return;
-    }
+        {
+            ApplyZeroGravityMovement(input, isSwinging); 
+            return;
+        }
 
         Vector2 velocity = rb.linearVelocity;
 
         if (isSwinging)
         {
+            // 스윙 로직
         }
         else
         {
-            float targetSpeed = input.x * maxSpeed;
-            float currentAccel = acceleration; 
-            
+            // 현재 설정된 기본값 가져오기
+            float currentMaxSpeed = maxSpeed;
+            float currentAccel = 0f;
+
+            // 가속도 결정
             if (input.x != 0)
             {
                 if (Mathf.Sign(input.x) != Mathf.Sign(velocity.x) && Mathf.Abs(velocity.x) > 0.1f)
                     currentAccel = turnSpeed;
+                else
+                    currentAccel = acceleration;
             }
             else
             {
                 currentAccel = deceleration;
             }
 
+            // [핵심] 저중력 보정 로직 (가속도 & 최대속도)
+            float gScale = Mathf.Abs(gravityMultiplier);
+            if (gScale < 1f && gScale > 0.01f)
+            {
+                // 1. 미끄러짐(관성) 적용
+                currentAccel *= Mathf.Pow(gScale, horizontalControlScaling);
+                
+                // 2. 최대 속도 감소 적용 [신규]
+                currentMaxSpeed *= Mathf.Pow(gScale, maxSpeedScaling);
+            }
+
+            // 최종 목표 속도 계산 (보정된 MaxSpeed 사용)
+            float targetSpeed = input.x * currentMaxSpeed;
+            
+            // 물리 적용
             velocity.x = Mathf.MoveTowards(velocity.x, targetSpeed, currentAccel * Time.fixedDeltaTime);
         }
 
@@ -193,7 +219,6 @@ public class Player_Movement : MonoBehaviour
 
     private void ApplyZeroGravityMovement(Vector2 input, bool isSwinging)
     {
-        // 1. 가속 (옵션 A: 수동 입력) - 그네 타듯이 입력하면 가속됨
         if (input != Vector2.zero)
         {
             rb.AddForce(input * zeroGravityAccel, ForceMode2D.Force);
@@ -203,8 +228,6 @@ public class Player_Movement : MonoBehaviour
 
         if (isSwinging)
         {
-            // [상태 1: 스윙 중]
-            // 저항(Drag)을 없애 가속력을 보존하고, 속도 제한을 대폭 늘려줍니다.
             if (currentSpeed > zeroGravitySwingMaxSpeed)
             {
                 rb.linearVelocity = rb.linearVelocity.normalized * zeroGravitySwingMaxSpeed;
@@ -212,18 +235,13 @@ public class Player_Movement : MonoBehaviour
         }
         else
         {
-            // [상태 2: 줄을 놓음 (자유 유영)]
-            // 핵심: "Soft Cap" - 속도가 빠를 때 강제로 깎지 않고 서서히 줄임
-            
             if (currentSpeed > zeroGravityMaxSpeed)
             {
-                // 현재 속도가 평소 제한보다 빠르면, 서서히 감속 (자연스러운 관성 이동)
                 float newSpeed = Mathf.MoveTowards(currentSpeed, zeroGravityMaxSpeed, velocityDecayRate * Time.fixedDeltaTime);
                 rb.linearVelocity = rb.linearVelocity.normalized * newSpeed;
             }
             else
             {
-                // 평범한 속도라면 드래그(마찰) 적용 및 일반 제한
                 rb.linearVelocity *= (1f - zeroGravityDrag * Time.fixedDeltaTime);
 
                 if (currentSpeed > zeroGravityMaxSpeed)
