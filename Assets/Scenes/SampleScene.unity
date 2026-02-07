@@ -405,13 +405,13 @@ MonoBehaviour:
     m_Bits: 64
   anchorRayDistance: 1
   maxRopeLength: 5
-  swingAcceleration: 5
+  swingAcceleration: 4.5
   pullInitSpeed: 5
   pullMaxSpeed: 35
   pullAccelDuration: 0.7
   retractionCooldown: 0.5
   releaseVelocityMult: 1.1
-  releaseUpwardForce: 10
+  releaseUpwardForce: 5
 --- !u!114 &86443583
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -428,6 +428,7 @@ MonoBehaviour:
   grappleKey: 102
   retractKey: 103
   observeKey: 306
+  observeCooldown: 3
 --- !u!114 &86443584
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -440,7 +441,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b42b3472cf9d2ad408b1bf3af5a3cdfc, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Player_Movement
-  maxSpeed: 8
+  maxSpeed: 7
   acceleration: 25
   deceleration: 40
   turnSpeed: 120
