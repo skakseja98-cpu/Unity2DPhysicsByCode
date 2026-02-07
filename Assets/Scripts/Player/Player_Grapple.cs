@@ -4,9 +4,16 @@ public class Player_Grapple : MonoBehaviour
 {
     [Header("Grapple Settings")]
     public GameObject ropePrefab;
-    public LayerMask groundLayer;
-    public float anchorRayDistance = 10f;
-    public float maxRopeLength = 15f;
+    
+    [Header("Anchor Detection")]
+    public LayerMask anchorLayer;      
+    public float detectionRadius = 10f; // 앵커 감지 범위
+    
+    [Header("Rope Mechanics")]
+    [Tooltip("줄이 생성될 때의 고정 길이. 이 값이 감지 범위보다 길어야 줄이 축 늘어집니다.")]
+    public float maxRopeLength = 15f;   // 고정 줄 길이 (늘어짐 연출용)
+    
+    [Header("Swinging Physics")]
     public float swingAcceleration = 40f;
 
     [Header("Retraction")]
@@ -19,10 +26,12 @@ public class Player_Grapple : MonoBehaviour
     public float releaseVelocityMult = 1.2f;
     public float releaseUpwardForce = 5f;
 
+    // 상태 프로퍼티
     public bool HasAnchor { get; private set; }
     public Rope CurrentRope { get; private set; }
     public bool IsTaut { get; private set; }
-
+    
+    // 내부 변수
     private Rigidbody2D rb;
     private BoxCollider2D boxCol;
     private Player_Movement movement;
@@ -34,6 +43,11 @@ public class Player_Grapple : MonoBehaviour
     private float currentGravityScale = 1f;
     private float nextRetractTime = 0f;
 
+    // 타겟팅 관련 변수
+    private Anchor currentTargetAnchor; 
+    private Anchor closestAnchor;       
+
+    // [복구] 고스트 모드 관련 변수
     private bool isGhostMode;
     private int playerLayer;
     private int groundLayerIndex;
@@ -44,9 +58,11 @@ public class Player_Grapple : MonoBehaviour
         boxCol = _col;
         movement = _move;
 
+        // [복구] 레이어 인덱스 계산 (충돌 무시용)
         playerLayer = gameObject.layer;
-        // LayerMask 비트 연산으로 Index 찾기 (안전한 방식)
-        int layerVal = groundLayer.value;
+        
+        // Ground LayerMask에서 실제 레이어 인덱스 추출
+        int layerVal = movement.groundLayer.value;
         int index = 0;
         while(layerVal > 1) { layerVal >>= 1; index++; }
         groundLayerIndex = index;
@@ -58,11 +74,30 @@ public class Player_Grapple : MonoBehaviour
         if (CurrentRope != null) CurrentRope.SetGravityScale(scale);
     }
 
-    // [수정] 외부(Controller)에서 호출하는 방식으로 변경 (HandleInput 삭제)
+    void Update()
+    {
+        if (!HasAnchor)
+        {
+            FindClosestAnchor();
+        }
+        else
+        {
+            if (currentTargetAnchor != null)
+            {
+                currentTargetAnchor.Deselect();
+                currentTargetAnchor = null;
+            }
+        }
+    }
+
     public void TryFireAnchor()
     {
-        if (HasAnchor) return; // 이미 있으면 발사 안 함 (F는 설치만)
-        FireAnchor();
+        if (HasAnchor) return; 
+
+        if (currentTargetAnchor != null)
+        {
+            ConnectToAnchor(currentTargetAnchor);
+        }
     }
 
     public void TryReleaseAnchor()
@@ -72,6 +107,7 @@ public class Player_Grapple : MonoBehaviour
 
     public void ApplyPhysics(bool isRetractHeld, Vector2 inputDir)
     {
+        // [복구] 고스트 모드(벽 통과) 관리 로직 실행
         ManageGhostMode(isRetractHeld);
 
         if (!HasAnchor) 
@@ -81,6 +117,8 @@ public class Player_Grapple : MonoBehaviour
         }
 
         float dist = Vector2.Distance(transform.position, anchorPos);
+        
+        // 줄 길이 제한 로직 (Slack)
         IsTaut = dist >= currentMaxLen - 0.2f;
 
         if (!movement.IsGrounded && IsTaut && inputDir.x != 0)
@@ -94,39 +132,91 @@ public class Player_Grapple : MonoBehaviour
         if (CurrentRope != null) CurrentRope.UpdateEndPosition(transform.position);
     }
 
-    private void FireAnchor()
+    // ---------------------------------------------------------
+    // [복구] 고스트 모드 로직 (Ground 레이어 충돌 무시)
+    // ---------------------------------------------------------
+    private void ManageGhostMode(bool isRetractHeld)
     {
-        Vector2[] directions = { Vector2.down, Vector2.up, Vector2.right, Vector2.left, new Vector2(1, -1), new Vector2(-1, -1) };
-        RaycastHit2D closestHit = new RaycastHit2D();
-        float minDst = float.MaxValue;
-        bool found = false;
-
-        foreach (var dir in directions)
+        // 땅에 있을 때는 고스트 모드 해제
+        if (movement.IsGrounded)
         {
-            RaycastHit2D hit = Physics2D.Raycast(transform.position, dir, anchorRayDistance, groundLayer);
-            if (hit.collider != null && hit.distance < minDst)
+            if (isGhostMode) SetGhostMode(false);
+            return;
+        }
+
+        // 벽 속에 갇혀있는지 확인
+        bool isInsideWall = Physics2D.OverlapBox(boxCol.bounds.center, boxCol.bounds.size * 0.7f, 0f, movement.groundLayer);
+        bool shouldBeGhost = false;
+
+        // G키를 누르고 있거나, 이미 벽 속에 있다면 고스트 모드 유지
+        if (isRetractHeld) shouldBeGhost = true;
+        else if (isInsideWall) shouldBeGhost = true;
+
+        if (isGhostMode != shouldBeGhost) SetGhostMode(shouldBeGhost);
+    }
+
+    private void SetGhostMode(bool active)
+    {
+        isGhostMode = active;
+        // 플레이어와 땅의 충돌을 켜거나 끔
+        Physics2D.IgnoreLayerCollision(playerLayer, groundLayerIndex, active);
+    }
+    // ---------------------------------------------------------
+
+    private void FindClosestAnchor()
+    {
+        Collider2D[] anchors = Physics2D.OverlapCircleAll(transform.position, detectionRadius, anchorLayer);
+        
+        float minDst = float.MaxValue;
+        Anchor newClosest = null;
+
+        foreach (var col in anchors)
+        {
+            float dst = Vector2.Distance(transform.position, col.transform.position);
+            
+            if (dst < minDst)
             {
-                minDst = hit.distance;
-                closestHit = hit;
-                found = true;
+                Vector2 dir = (col.transform.position - transform.position).normalized;
+                float distToAnchor = Vector2.Distance(transform.position, col.transform.position);
+                
+                if (!Physics2D.Raycast(transform.position, dir, distToAnchor, movement.groundLayer))
+                {
+                    Anchor anchorScript = col.GetComponent<Anchor>();
+                    if (anchorScript != null)
+                    {
+                        minDst = dst;
+                        newClosest = anchorScript;
+                    }
+                }
             }
         }
 
-        if (found)
+        if (newClosest != currentTargetAnchor)
         {
-            anchorPos = closestHit.point;
-            GameObject ropeObj = Instantiate(ropePrefab, anchorPos, Quaternion.identity);
-            CurrentRope = ropeObj.GetComponent<Rope>();
-            currentMaxLen = maxRopeLength;
-            CurrentRope.InitializeRope(anchorPos, transform, maxRopeLength, currentGravityScale);
-            HasAnchor = true;
+            if (currentTargetAnchor != null) currentTargetAnchor.Deselect();
+            if (newClosest != null) newClosest.Select();
+            
+            currentTargetAnchor = newClosest;
         }
+    }
+
+    private void ConnectToAnchor(Anchor target)
+    {
+        // [수정 적용됨] 오프셋이 적용된 실제 연결 지점 가져오기
+        anchorPos = target.AttachPoint;
+
+        GameObject ropeObj = Instantiate(ropePrefab, anchorPos, Quaternion.identity);
+        CurrentRope = ropeObj.GetComponent<Rope>();
+        
+        // [수정 적용됨] 인스펙터 고정 길이 적용 (늘어짐 연출)
+        currentMaxLen = maxRopeLength; 
+
+        CurrentRope.InitializeRope(anchorPos, transform, currentMaxLen, currentGravityScale);
+        HasAnchor = true;
     }
 
     private void ReleaseAnchor()
     {
-        // [수정] 무중력 상태(중력 절대값이 0.1 미만)가 아닐 때만 반동을 적용합니다.
-        // 무중력일 때는 관성 그대로 날아가야 하므로 이 로직을 건너뜁니다.
         if (!movement.IsGrounded && Mathf.Abs(currentGravityScale) > 0.1f)
         {
             Vector2 boostVel = rb.linearVelocity * releaseVelocityMult;
@@ -137,22 +227,22 @@ public class Player_Grapple : MonoBehaviour
         if (CurrentRope != null) Destroy(CurrentRope.gameObject);
         CurrentRope = null;
         HasAnchor = false;
+        
+        FindClosestAnchor();
     }
 
     private void ApplyRetraction(bool isHeld)
     {
         if (isHeld && Time.time >= nextRetractTime)
         {
-            float standOffset = boxCol.bounds.extents.y;
-            Vector2 targetPos = anchorPos + Vector2.up * standOffset;
-            Vector2 toTarget = targetPos - rb.position;
+            Vector2 toAnchor = anchorPos - rb.position;
             
-            if (toTarget.magnitude > 0.1f)
+            if (toAnchor.magnitude > 1f)
             {
                 pullTimer += Time.fixedDeltaTime;
                 float t = Mathf.Clamp01(pullTimer / pullAccelDuration);
                 float speed = Mathf.Lerp(pullInitSpeed, pullMaxSpeed, t);
-                rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, toTarget.normalized * speed, 0.1f);
+                rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, toAnchor.normalized * speed, 0.1f);
                 
                 currentMaxLen = Vector2.Distance(rb.position, anchorPos);
                 if (CurrentRope != null) CurrentRope.UpdateRopeLength(currentMaxLen);
@@ -179,27 +269,10 @@ public class Player_Grapple : MonoBehaviour
             if (velDot < 0) rb.linearVelocity += tetherDir * (-velDot);
         }
     }
-
-    private void ManageGhostMode(bool isRetractHeld)
+    
+    void OnDrawGizmosSelected()
     {
-        if (movement.IsGrounded)
-        {
-            if (isGhostMode) SetGhostMode(false);
-            return;
-        }
-
-        bool isInsideWall = Physics2D.OverlapBox(boxCol.bounds.center, boxCol.bounds.size * 0.7f, 0f, groundLayer);
-        bool shouldBeGhost = false;
-
-        if (isRetractHeld) shouldBeGhost = true;
-        else if (isInsideWall) shouldBeGhost = true;
-
-        if (isGhostMode != shouldBeGhost) SetGhostMode(shouldBeGhost);
-    }
-
-    private void SetGhostMode(bool active)
-    {
-        isGhostMode = active;
-        Physics2D.IgnoreLayerCollision(playerLayer, groundLayerIndex, active);
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawWireSphere(transform.position, detectionRadius);
     }
 }
