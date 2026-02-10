@@ -72,6 +72,6 @@ public class DialogueStyle
     public int soundFrequency = 2;
     
     [Tooltip("목소리 크기")]
-    [Range(0.1f, 1.0f)] 
+    [Range(0.1f, 2.0f)] 
     public float volume = 1.0f;
 }
