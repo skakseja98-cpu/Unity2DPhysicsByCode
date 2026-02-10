@@ -8,7 +8,7 @@ public class InteractionUIManager : MonoBehaviour
 {
     public static InteractionUIManager Instance;
 
-    // ... (기존 변수들 생략) ...
+    // ... (기존 UI 변수들 유지) ...
     [Header("--- 서류 UI ---")]
     public GameObject docPanel;
     public Image docImageSlot;
@@ -18,16 +18,13 @@ public class InteractionUIManager : MonoBehaviour
     private GameObject currentDialogBox;
     private TextMeshProUGUI dialogText;
 
-    [Header("--- 기본 사운드 설정 ---")]
+    [Header("--- 기본 사운드 ---")]
     public AudioSource audioSource;
-    public AudioClip defaultTypingClip; // 공용 삑 소리 (이름 변경됨!)
+    public AudioClip defaultTypingClip;
 
-    // 🔴 현재 말하고 있는 NPC의 정보 저장용 변수
-    private float currentTypingSpeed = 0.05f;
-    private float currentVoicePitch = 1.0f;
-    private AudioClip currentVoiceClip;
+    // 🔴 현재 스타일을 저장할 변수 (DialogueStyle 타입)
+    private DialogueStyle currentStyle;
 
-    // ... (변수들 생략) ...
     private Queue<string> sentences = new Queue<string>();
     private string currentSentence;
     private bool isTyping = false;
@@ -37,24 +34,23 @@ public class InteractionUIManager : MonoBehaviour
     {
         if (Instance == null) Instance = this;
         else Destroy(gameObject);
+        
         if(docPanel != null) docPanel.SetActive(false);
         if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
     }
 
-    // 🔴 중요: 파라미터가 늘어났습니다!
-    public void StartDialog(Vector3 position, string[] lines, float speed, float pitch, AudioClip clip)
+    // 🔴 매개변수가 DialogueStyle 하나로 깔끔해졌습니다!
+    public void StartDialog(Vector3 position, string[] lines, DialogueStyle style)
     {
-        CloseDialog(); // 기존 대화 닫기
-
-        // 1. NPC가 준 정보 받아적기
-        currentTypingSpeed = speed;
-        currentVoicePitch = pitch;
+        CloseDialog();
         
-        // NPC 전용 소리가 있으면 그거 쓰고, 없으면(null) 기본 소리 쓰기
-        if (clip != null) currentVoiceClip = clip;
-        else currentVoiceClip = defaultTypingClip;
+        // 스타일 저장 (만약 null이면 기본값 생성)
+        currentStyle = style ?? new DialogueStyle(); 
 
-        // 2. 대화 준비
+        // 오디오 클립 미리 세팅
+        AudioClip clipToPlay = currentStyle.uniqueVoiceClip != null ? currentStyle.uniqueVoiceClip : defaultTypingClip;
+        audioSource.clip = clipToPlay; // PlayOneShot 대신 미리 세팅해도 됨 (여기선 유연하게 유지)
+
         sentences.Clear();
         foreach (string line in lines) sentences.Enqueue(line);
 
@@ -64,10 +60,10 @@ public class InteractionUIManager : MonoBehaviour
         NextSentence();
     }
 
-    // ... (AdvanceDialog, NextSentence, CloseDialog 등은 건드릴 필요 없음) ...
     public void AdvanceDialog()
     {
         if (currentDialogBox == null) return;
+
         if (isTyping)
         {
             StopCoroutine(typingCoroutine);
@@ -94,6 +90,12 @@ public class InteractionUIManager : MonoBehaviour
 
     public void CloseDialog()
     {
+        if (typingCoroutine != null)
+        {
+            StopCoroutine(typingCoroutine);
+            typingCoroutine = null;
+        }
+        
         if (currentDialogBox != null)
         {
             Destroy(currentDialogBox);
@@ -104,8 +106,7 @@ public class InteractionUIManager : MonoBehaviour
 
     public bool IsDialogOpen() => currentDialogBox != null;
 
-
-    // 🔴 타자기 효과 수정
+    // 🔴 타자기 효과 (업그레이드 버전)
     IEnumerator TypewriterEffect(string fullText)
     {
         isTyping = true;
@@ -117,30 +118,48 @@ public class InteractionUIManager : MonoBehaviour
             dialogText.text += letter;
             charCount++;
 
-            // 공백 아니고, 2글자마다 소리 재생 (취향따라 1이나 3으로 변경 가능)
-            if (letter != ' ' && charCount % 2 == 0)
+            // 1. 소리 재생 (빈도 설정 적용)
+            // 공백 아니고, 설정된 빈도(Frequency)마다 재생
+            if (letter != ' ' && charCount % currentStyle.soundFrequency == 0)
             {
                 PlayTypingSound();
             }
 
-            // 🔴 여기가 핵심! NPC가 정한 속도만큼 기다림
-            yield return new WaitForSeconds(currentTypingSpeed); 
+            // 2. 기본 대기 (타이핑 속도)
+            yield return new WaitForSeconds(currentStyle.typingSpeed);
+
+            // 3. 구두점 일시정지 (Punctuation Pause)
+            // 쉼표나 마침표 뒤에서는 조금 더 쉬어서 '읽는 맛'을 줌
+            if (currentStyle.pauseOnPunctuation)
+            {
+                if (letter == ',' || letter == '.' || letter == '?' || letter == '!')
+                {
+                    // 기본 속도의 5배만큼 더 쉼
+                    yield return new WaitForSeconds(currentStyle.typingSpeed * 5.0f);
+                }
+            }
         }
         isTyping = false;
     }
 
-    // 🔴 소리 재생 함수 수정
+    // 🔴 소리 재생 (랜덤 피치 + 볼륨 적용)
     void PlayTypingSound()
     {
-        if (audioSource != null && currentVoiceClip != null)
+        if (audioSource == null) return;
+
+        AudioClip clipToPlay = currentStyle.uniqueVoiceClip != null ? currentStyle.uniqueVoiceClip : defaultTypingClip;
+        
+        if (clipToPlay != null)
         {
-            // NPC가 정한 피치에 약간의 랜덤성(±0.1)을 더해서 자연스럽게
-            audioSource.pitch = Random.Range(currentVoicePitch - 0.1f, currentVoicePitch + 0.1f);
-            audioSource.PlayOneShot(currentVoiceClip);
+            // 랜덤 피치: 기준 피치에서 ±Variance 만큼 흔들림
+            float randomPitch = currentStyle.pitch + Random.Range(-currentStyle.pitchVariance, currentStyle.pitchVariance);
+            
+            audioSource.pitch = randomPitch;
+            audioSource.PlayOneShot(clipToPlay, currentStyle.volume);
         }
     }
 
-    // ... (서류 관련 함수들 유지) ...
+    // ... (서류 관련 코드는 그대로 유지) ...
     public void ShowDocument(Sprite docSprite)
     {
         docImageSlot.sprite = docSprite;
