@@ -237,7 +237,7 @@ public class Player_Grapple : MonoBehaviour
         {
             Vector2 toAnchor = anchorPos - rb.position;
             
-            if (toAnchor.magnitude > 1f)
+            if (toAnchor.magnitude > 0.3f)
             {
                 pullTimer += Time.fixedDeltaTime;
                 float t = Mathf.Clamp01(pullTimer / pullAccelDuration);
