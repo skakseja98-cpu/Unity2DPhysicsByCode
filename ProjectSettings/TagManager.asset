@@ -14,8 +14,8 @@ TagManager:
   - Ground
   - Anchor
   - Interactable
-  - 
-  - 
+  - Pickupable
+  - Player
   - 
   - 
   - 

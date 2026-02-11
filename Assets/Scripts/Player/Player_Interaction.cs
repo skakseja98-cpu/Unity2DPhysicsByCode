@@ -1,39 +1,116 @@
 using UnityEngine;
 
-public class PlayerInteraction : MonoBehaviour
+public class Player_Interaction : MonoBehaviour
 {
+    public static Player_Interaction Instance;
     public float detectRange = 2f;
     public LayerMask interactLayer;
 
+
+    [Header("Hold System")]
+    public Transform holdPoint; // 1단계에서 만든 HoldPoint 연결
+    public float throwForce = 5f; // 던지는 힘
+
+    private Pickupable_Object currentHeldItem;
+
     private IInteractable currentInteractable;
+
+    void Awake()
+    {
+        // [핵심 해결] 이 코드가 빠져있으면 에러가 납니다!
+        // "게임이 시작되면 내가(this) 바로 그 Instance다"라고 선언하는 것입니다.
+        if (Instance == null) 
+            Instance = this;
+        else 
+            Destroy(gameObject);
+
+        // ... (기존 초기화 코드들 유지)
+        if(holdPoint == null) Debug.LogWarning("HoldPoint가 연결되지 않았습니다!");
+    }
+
 
     void Update()
     {
-        // 1. 플레이어 주변 감지 (기존 로직)
         DetectObject();
+        CheckDistanceForExit();
+    }
 
-        // 2. F키 입력 처리 (수정됨)
-        if (Input.GetKeyDown(KeyCode.F))
+    public void HandleNpcInteraction()
+    {
+        // 1. 대화창 넘기기 (최우선)
+        if (InteractionUIManager.Instance.IsDialogOpen())
         {
-            // 만약 대화창이 이미 열려있다면? -> 대화 넘기기/스킵 (NPC 상호작용 아님)
-            if (InteractionUIManager.Instance.IsDialogOpen())
-            {
-                InteractionUIManager.Instance.AdvanceDialog();
-            }
-            // 서류가 열려있다면? -> 닫기
-            else if (InteractionUIManager.Instance.IsDocumentOpen())
-            {
-                InteractionUIManager.Instance.CloseDocument();
-            }
-            // 아무것도 안 열려있고, 감지된 물체가 있다면? -> 상호작용 시작
-            else if (currentInteractable != null)
-            {
-                currentInteractable.OnInteract();
-            }
+            InteractionUIManager.Instance.AdvanceDialog();
+            return; 
         }
         
-        // 3. 거리 체크 (멀어지면 대화 종료)
-        CheckDistanceForExit();
+        // 2. 서류 닫기
+        if (InteractionUIManager.Instance.IsDocumentOpen())
+        {
+            InteractionUIManager.Instance.CloseDocument();
+            return;
+        }
+
+        // 3. 감지된 대상이 있고 + "아이템이 아닐 때" (NPC, 문 등)
+        if (currentInteractable != null)
+        {
+            // 현재 감지된 게 '줍는 아이템'이면 E키로는 반응 안 함 (무시)
+            if (currentInteractable is Pickupable_Object) return;
+
+            // NPC나 문(Door)이라면 상호작용 실행
+            currentInteractable.OnInteract();
+        }
+    }
+
+    public void HandleItemAction()
+    {
+        // 1. 이미 들고 있으면 -> 떨구기
+        if (currentHeldItem != null)
+        {
+            DropItem();
+            return;
+        }
+
+        // 2. 안 들고 있고, 바닥에 아이템이 감지됐다면 -> 줍기
+        if (currentInteractable != null && currentInteractable is Pickupable_Object)
+        {
+            currentInteractable.OnInteract(); // 줍기 실행
+        }
+    }
+
+    public void PickUpItem(Pickupable_Object item)
+    {
+        if (currentHeldItem != null) DropItem(); 
+
+        currentHeldItem = item;
+        currentHeldItem.OnPickedUp(holdPoint);
+        
+        if (currentInteractable == (IInteractable)item)
+        {
+            currentInteractable = null;
+        }
+    }
+
+    public void DropItem()
+    {
+        if (currentHeldItem == null) return;
+
+        // [수정 요청 반영] 던지지 않고 제자리에 툭 떨구기
+        // 속도를 0으로 만들어서 바로 아래로 떨어지게 함 (자연스럽게 중력 받음)
+        currentHeldItem.OnDropped(Vector2.zero); 
+        
+        currentHeldItem = null;
+    }
+
+    public Pickupable_Object GetHeldItem() => currentHeldItem;
+    
+    public void DestroyHeldItem()
+    {
+        if (currentHeldItem != null)
+        {
+            Destroy(currentHeldItem.gameObject);
+            currentHeldItem = null;
+        }
     }
 
     void DetectObject()

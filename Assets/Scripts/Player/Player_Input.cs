@@ -4,9 +4,11 @@ public class Player_Input : MonoBehaviour
 {
     [Header("Controls")]
     public KeyCode jumpKey = KeyCode.Space;
-    public KeyCode grappleKey = KeyCode.F;
+    public KeyCode grappleKey = KeyCode.F;       // 앵커 (기존 유지)
+    public KeyCode npcInteractKey = KeyCode.E;   // [신규] 대화/문 (NPC, Door)
+    public KeyCode itemPickupKey = KeyCode.R;    // [신규] 줍기/떨구기 (Item)
+    public KeyCode observeKey = KeyCode.LeftControl;
     public KeyCode retractKey = KeyCode.G;
-    public KeyCode observeKey = KeyCode.LeftControl; 
 
     [Header("Observation Settings")]
     [Tooltip("관찰 모드 사용 후 재사용 대기시간 (초)")]
@@ -18,6 +20,8 @@ public class Player_Input : MonoBehaviour
     public bool IsJumpUp { get; private set; }
     public bool IsGrappleDown { get; private set; }
     public bool IsRetractHeld { get; private set; }
+    public bool IsNpcInteractDown { get; private set; } 
+    public bool IsItemPickupDown { get; private set; }
 
     // 내부 상태 변수
     private float currentCooldownTimer = 0f;
@@ -90,7 +94,9 @@ public class Player_Input : MonoBehaviour
 
         IsJumpDown = Input.GetKeyDown(jumpKey);
         IsJumpUp = Input.GetKeyUp(jumpKey);
-        IsGrappleDown = Input.GetKeyDown(grappleKey);
+        IsGrappleDown = Input.GetKeyDown(grappleKey);         // F
+        IsNpcInteractDown = Input.GetKeyDown(npcInteractKey); // E
+        IsItemPickupDown = Input.GetKeyDown(itemPickupKey);   // R
         IsRetractHeld = Input.GetKey(retractKey);
     }
 

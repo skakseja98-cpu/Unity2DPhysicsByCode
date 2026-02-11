@@ -7,6 +7,7 @@ public class Player_Controller : MonoBehaviour
     private Player_Grapple _grapple;
     private Rigidbody2D _rb;
     private BoxCollider2D _col;
+    private Player_Interaction _interaction;
 
     public void SetGravityScale(float scale)
     {
@@ -26,6 +27,7 @@ public class Player_Controller : MonoBehaviour
         _grapple = GetComponent<Player_Grapple>();
         _rb = GetComponent<Rigidbody2D>();
         _col = GetComponent<BoxCollider2D>();
+        _interaction = GetComponent<Player_Interaction>();
 
         _movement.Initialize(_rb, _col);
         _grapple.Initialize(_rb, _col, _movement);
@@ -33,10 +35,25 @@ public class Player_Controller : MonoBehaviour
 
     void Update()
     {
-        // 1. 접지 체크 (매 프레임)
-        _movement.HandleGroundCheck();
+        if (_movement != null) _movement.HandleGroundCheck();
 
-        // [수정] F키: 앵커 토글 (설치 되어있으면 해제, 없으면 발사)
+        // -------------------------------------------------------
+        // [수정] 키 역할 분리
+        // -------------------------------------------------------
+
+        // 1. [E] NPC / 문 상호작용 (대화 스킵 포함)
+        if (_input.IsNpcInteractDown)
+        {
+            if (_interaction != null) _interaction.HandleNpcInteraction();
+        }
+
+        // 2. [R] 아이템 줍기 / 떨구기
+        if (_input.IsItemPickupDown)
+        {
+            if (_interaction != null) _interaction.HandleItemAction();
+        }
+
+        // 3. [F] 앵커 발사 (기존 유지, 이제 다른 기능과 겹치지 않음)
         if (_input.IsGrappleDown)
         {
             if (_grapple.HasAnchor)
@@ -49,18 +66,9 @@ public class Player_Controller : MonoBehaviour
             }
         }
 
-        // [수정] Space키: 앵커 여부와 상관없이 점프 수행 (독립적)
-        // 이제 줄에 매달려 있어도 스페이스바를 누르면 줄을 끊지 않고 
-        // 2단 점프 힘을 받아 위로 솟구칩니다. (줄을 끊으려면 F를 눌러야 함)
-        if (_input.IsJumpDown)
-        {
-            _movement.PerformJump();
-        }
-
-        if (_input.IsJumpUp)
-        {
-            _movement.CutJump();
-        }
+        // ... (점프 로직 유지) ...
+        if (_input.IsJumpDown) _movement.PerformJump();
+        if (_input.IsJumpUp) _movement.CutJump();
     }
 
     void FixedUpdate()
