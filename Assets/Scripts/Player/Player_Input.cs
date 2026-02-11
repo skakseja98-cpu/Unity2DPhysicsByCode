@@ -5,8 +5,7 @@ public class Player_Input : MonoBehaviour
     [Header("Controls")]
     public KeyCode jumpKey = KeyCode.Space;
     public KeyCode grappleKey = KeyCode.F;       // 앵커 (기존 유지)
-    public KeyCode npcInteractKey = KeyCode.E;   // [신규] 대화/문 (NPC, Door)
-    public KeyCode itemPickupKey = KeyCode.R;    // [신규] 줍기/떨구기 (Item)
+    public KeyCode npcInteractKey = KeyCode.E;   // [신규] 대화
     public KeyCode observeKey = KeyCode.LeftControl;
     public KeyCode retractKey = KeyCode.G;
 
@@ -21,7 +20,6 @@ public class Player_Input : MonoBehaviour
     public bool IsGrappleDown { get; private set; }
     public bool IsRetractHeld { get; private set; }
     public bool IsNpcInteractDown { get; private set; } 
-    public bool IsItemPickupDown { get; private set; }
 
     // 내부 상태 변수
     private float currentCooldownTimer = 0f;
@@ -96,7 +94,6 @@ public class Player_Input : MonoBehaviour
         IsJumpUp = Input.GetKeyUp(jumpKey);
         IsGrappleDown = Input.GetKeyDown(grappleKey);         // F
         IsNpcInteractDown = Input.GetKeyDown(npcInteractKey); // E
-        IsItemPickupDown = Input.GetKeyDown(itemPickupKey);   // R
         IsRetractHeld = Input.GetKey(retractKey);
     }
 
@@ -107,6 +104,7 @@ public class Player_Input : MonoBehaviour
         IsJumpUp = false;
         IsGrappleDown = false;
         IsRetractHeld = false;
+        IsNpcInteractDown = false;
     }
 
     // 디버그용 (화면 좌측 상단에 쿨타임 표시)

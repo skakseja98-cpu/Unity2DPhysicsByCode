@@ -47,12 +47,6 @@ public class Player_Controller : MonoBehaviour
             if (_interaction != null) _interaction.HandleNpcInteraction();
         }
 
-        // 2. [R] 아이템 줍기 / 떨구기
-        if (_input.IsItemPickupDown)
-        {
-            if (_interaction != null) _interaction.HandleItemAction();
-        }
-
         // 3. [F] 앵커 발사 (기존 유지, 이제 다른 기능과 겹치지 않음)
         if (_input.IsGrappleDown)
         {
