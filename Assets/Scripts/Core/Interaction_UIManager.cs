@@ -29,6 +29,7 @@ public class InteractionUIManager : MonoBehaviour
     private string currentSentence;
     private bool isTyping = false;
     private Coroutine typingCoroutine;
+    private bool currentDialogSkippable = true;
 
     void Awake()
     {
@@ -39,10 +40,11 @@ public class InteractionUIManager : MonoBehaviour
         if (audioSource == null) audioSource = gameObject.AddComponent<AudioSource>();
     }
 
-    // 🔴 매개변수가 DialogueStyle 하나로 깔끔해졌습니다!
-    public void StartDialog(Vector3 position, string[] lines, DialogueStyle style)
+    public void StartDialog(Vector3 position, string[] lines, DialogueStyle style, bool canSkip)
     {
         CloseDialog();
+
+        currentDialogSkippable = canSkip;
         
         // 스타일 저장 (만약 null이면 기본값 생성)
         currentStyle = style ?? new DialogueStyle(); 
@@ -57,6 +59,11 @@ public class InteractionUIManager : MonoBehaviour
         currentDialogBox = Instantiate(dialogBoxPrefab, position + new Vector3(0, 1.5f, 0), Quaternion.identity);
         dialogText = currentDialogBox.GetComponentInChildren<TextMeshProUGUI>();
 
+        dialogText.color = currentStyle.textColor;
+
+        dialogText.text = ""; 
+        dialogText.maxVisibleCharacters = 0;
+
         NextSentence();
     }
 
@@ -66,8 +73,13 @@ public class InteractionUIManager : MonoBehaviour
 
         if (isTyping)
         {
+            // 🔴 [핵심 로직] 스킵이 불가능한 대화라면, 입력 무시!
+            if (!currentDialogSkippable) return;
+
+            // 스킵 가능하다면 -> 글자 제한 풀어서 한 번에 보여주기 (지난번 수정 코드)
             StopCoroutine(typingCoroutine);
-            dialogText.text = currentSentence;
+            dialogText.maxVisibleCharacters = int.MaxValue; 
+            dialogText.ForceMeshUpdate(); 
             isTyping = false;
         }
         else
@@ -110,35 +122,48 @@ public class InteractionUIManager : MonoBehaviour
     IEnumerator TypewriterEffect(string fullText)
     {
         isTyping = true;
-        dialogText.text = ""; 
-        int charCount = 0;
+        
+        // 1. 텍스트를 먼저 다 집어넣습니다. (태그가 포함된 상태로)
+        dialogText.text = fullText;
+        
+        // 2. 일단 하나도 안 보이게 숨깁니다.
+        dialogText.maxVisibleCharacters = 0;
 
-        foreach (char letter in fullText.ToCharArray())
+        // 3. TMP가 텍스트를 분석할 시간을 줍니다 (필수!)
+        dialogText.ForceMeshUpdate(); 
+
+        // 4. 실제로 보여줄 글자 수(태그 제외)를 가져옵니다.
+        TMP_TextInfo textInfo = dialogText.textInfo;
+        int totalVisibleChars = textInfo.characterCount; 
+
+        // 5. 0개부터 전체 개수까지 늘려갑니다.
+        for (int i = 1; i <= totalVisibleChars; i++)
         {
-            dialogText.text += letter;
-            charCount++;
+            dialogText.maxVisibleCharacters = i;
 
-            // 1. 소리 재생 (빈도 설정 적용)
-            // 공백 아니고, 설정된 빈도(Frequency)마다 재생
-            if (letter != ' ' && charCount % currentStyle.soundFrequency == 0)
+            // --- 사운드 재생 ---
+            if (i % currentStyle.soundFrequency == 0)
             {
                 PlayTypingSound();
             }
 
-            // 2. 기본 대기 (타이핑 속도)
-            yield return new WaitForSeconds(currentStyle.typingSpeed);
-
-            // 3. 구두점 일시정지 (Punctuation Pause)
-            // 쉼표나 마침표 뒤에서는 조금 더 쉬어서 '읽는 맛'을 줌
+            // --- 구두점 일시정지 (Punctuation Pause) ---
+            // 현재 출력된 마지막 글자가 무엇인지 알아야 함
             if (currentStyle.pauseOnPunctuation)
             {
-                if (letter == ',' || letter == '.' || letter == '?' || letter == '!')
+                // textInfo.characterInfo[i-1]에 현재 글자 정보가 들어있음
+                char lastChar = textInfo.characterInfo[i - 1].character;
+                
+                if (lastChar == ',' || lastChar == '.' || lastChar == '?' || lastChar == '!')
                 {
-                    // 기본 속도의 5배만큼 더 쉼
                     yield return new WaitForSeconds(currentStyle.typingSpeed * 5.0f);
                 }
             }
+
+            // 기본 대기
+            yield return new WaitForSeconds(currentStyle.typingSpeed);
         }
+
         isTyping = false;
     }
 

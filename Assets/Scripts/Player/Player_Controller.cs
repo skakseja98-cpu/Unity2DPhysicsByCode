@@ -20,8 +20,15 @@ public class Player_Controller : MonoBehaviour
     public Rigidbody2D Rb => _rb;
     public bool IsZeroGravity => Mathf.Abs(_movement.CurrentGravityMultiplier) < 0.01f;
 
+    public static Player_Controller Instance;
+
     void Awake()
     {
+        if (Instance == null) 
+            Instance = this;
+        else 
+            Destroy(gameObject);
+
         _input = GetComponent<Player_Input>();
         _movement = GetComponent<Player_Movement>();
         _grapple = GetComponent<Player_Grapple>();

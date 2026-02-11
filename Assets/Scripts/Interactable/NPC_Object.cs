@@ -6,6 +6,7 @@ public class NpcObject : MonoBehaviour, IInteractable
     public Sprite outlineSprite;
     private Sprite defaultSprite;
     private SpriteRenderer sr;
+    private bool hasTalked = false;
     
     [Header("--- 대화 내용 ---")]
     [TextArea] public string[] sentences;
@@ -37,7 +38,9 @@ public class NpcObject : MonoBehaviour, IInteractable
     public void OnInteract()
     {
         // 매니저에게 내 스타일 꾸러미(voiceStyle)를 통째로 넘깁니다.
-        InteractionUIManager.Instance.StartDialog(transform.position, sentences, voiceStyle);
+        InteractionUIManager.Instance.StartDialog(transform.position, sentences, voiceStyle, hasTalked);
+
+        hasTalked = true;
     }
     
     public float GetExitDistance() => exitDistance;
@@ -47,6 +50,9 @@ public class NpcObject : MonoBehaviour, IInteractable
 [System.Serializable]
 public class DialogueStyle
 {
+    [Header("비주얼 설정")] // [추가]
+    public Color textColor = Color.white; // [추가] 기본값은 흰색
+
     [Header("속도 & 리듬")]
     [Tooltip("글자 나오는 속도 (작을수록 빠름)")]
     [Range(0.01f, 0.2f)] 
