@@ -125,19 +125,16 @@ public class Player_Grapple : MonoBehaviour
 
     private void ManageGhostMode(bool isRetractHeld)
     {
-        if (movement.IsGrounded)
+        if (isRetractHeld)
         {
-            if (isGhostMode) SetGhostMode(false);
+            if (!isGhostMode) SetGhostMode(true);
             return;
         }
 
-        bool isInsideWall = Physics2D.OverlapBox(boxCol.bounds.center, boxCol.bounds.size * 0.7f, 0f, movement.groundLayer);
-        bool shouldBeGhost = false;
-
-        if (isRetractHeld) shouldBeGhost = true;
-        else if (isInsideWall) shouldBeGhost = true;
-
-        if (isGhostMode != shouldBeGhost) SetGhostMode(shouldBeGhost);
+        if (isGhostMode) 
+        {
+            SetGhostMode(false);
+        }
     }
 
     private void SetGhostMode(bool active)

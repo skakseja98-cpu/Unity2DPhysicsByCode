@@ -19,6 +19,7 @@ public class Player_Controller : MonoBehaviour
     public float HorizontalSpeed => Mathf.Abs(_rb.linearVelocity.x);
     public Rigidbody2D Rb => _rb;
     public bool IsZeroGravity => Mathf.Abs(_movement.CurrentGravityMultiplier) < 0.01f;
+    public bool IsClimbing => _movement.IsClimbing;
 
     public static Player_Controller Instance;
 
@@ -43,6 +44,14 @@ public class Player_Controller : MonoBehaviour
     void Update()
     {
         if (_movement != null) _movement.HandleGroundCheck();
+
+        if (_movement.CanClimb && 
+            _input.MoveVector.y > 0.1f && 
+            !_movement.IsClimbing && 
+            _movement.CurrentClimbCooldown <= 0)
+        {
+            _movement.SetClimbing(true);
+        }
 
         // -------------------------------------------------------
         // [수정] 키 역할 분리

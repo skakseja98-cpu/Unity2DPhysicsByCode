@@ -1,5 +1,6 @@
 using UnityEngine;
 using System.Collections;
+using UnityEngine.Tilemaps; // [필수] 타일맵 사용을 위해 추가
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(BoxCollider2D))]
@@ -47,10 +48,19 @@ public class Player_Movement : MonoBehaviour
     public float rayLength = 0.1f;
     public float rayInset = 0.05f;
     public float coyoteTime = 0.15f;
+
+    [Header("Climbing Settings")] // [신규 기능]
+    public float climbSpeed = 5f;
+    public LayerMask climbableLayer; // "Climbable" 레이어 설정 필요
+    public float climbJumpCooldownTime = 0.2f; // [신규 설정] 0.5초는 좀 길 수 있어서 0.2초 추천
+
     
     public bool IsGrounded { get; private set; }
+    public bool IsClimbing { get; private set; } // 벽타기 중인가?
+    public bool CanClimb { get; private set; }   // 벽타기 가능한 영역에 있는가?
     public int FacingDirection { get; private set; } = 1;
     public int JumpsLeft { get; private set; } 
+    public float CurrentClimbCooldown { get; private set; }
     public float CurrentGravityMultiplier => gravityMultiplier;
 
     private Rigidbody2D rb;
@@ -103,12 +113,27 @@ public class Player_Movement : MonoBehaviour
         }
     }
 
+    void Update()
+    {
+        if (CurrentClimbCooldown > 0)
+        {
+            CurrentClimbCooldown -= Time.deltaTime;
+        }
+    }
+
     public void PerformJump()
     {
+        if (IsClimbing)
+        {
+            SetClimbing(false);
+            CurrentClimbCooldown = climbJumpCooldownTime;
+        }
+
         if (Mathf.Abs(gravityMultiplier) < 0.1f) return;
 
         if (JumpsLeft > 0)
         {
+            
             float force = jumpForce;
 
             bool isFirstJump = IsGrounded || coyoteTimeCounter > 0;
@@ -149,6 +174,12 @@ public class Player_Movement : MonoBehaviour
 
     public void ApplyPhysics(Vector2 input, bool isSwinging)
     {
+        if (IsClimbing)
+        {
+            ApplyClimbingPhysics(input);
+            return; // 기존 중력/이동 로직 실행 안 함
+        }
+
         if (input.x != 0) FacingDirection = (int)Mathf.Sign(input.x);
 
         if (Mathf.Abs(gravityMultiplier) < 0.1f)
@@ -207,6 +238,39 @@ public class Player_Movement : MonoBehaviour
         else if (currentGravity > 0) velocity.y = Mathf.Min(velocity.y, maxFallSpeed);
 
         rb.linearVelocity = velocity;
+    }
+
+    private void ApplyClimbingPhysics(Vector2 input)
+    {
+        // 입력한 방향대로 즉시 속도 적용 (등속 운동)
+        rb.linearVelocity = input * climbSpeed;
+
+        // 바닥에 닿았는데 아래로 내려가려 하면 -> 벽타기 해제
+        if (IsGrounded && input.y < 0)
+        {
+            SetClimbing(false);
+        }
+    }
+
+    private void OnTriggerEnter2D(Collider2D collision)
+    {
+        if (((1 << collision.gameObject.layer) & climbableLayer) != 0)
+        {
+            CanClimb = true;
+        }
+    }
+
+    private void OnTriggerExit2D(Collider2D collision)
+    {
+        if (((1 << collision.gameObject.layer) & climbableLayer) != 0)
+        {
+            CanClimb = false;
+            
+            if (IsClimbing)
+            {
+                SetClimbing(false);
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -284,7 +348,20 @@ public class Player_Movement : MonoBehaviour
             }
         }
     }
-    
+
+    public void SetClimbing(bool active)
+    {
+        if (IsClimbing == active) return;
+
+        IsClimbing = active;
+
+        if (active)
+        {
+            rb.linearVelocity = Vector2.zero;
+            JumpsLeft = maxJumps;
+        }
+    }
+
     private void OnDrawGizmos()
     {
         if (boxCol == null) boxCol = GetComponent<BoxCollider2D>();
