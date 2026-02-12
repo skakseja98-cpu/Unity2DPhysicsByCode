@@ -67,8 +67,17 @@ public class Player_Interaction : MonoBehaviour
             }
         }
 
+        // [수정된 부분] 아무것도 감지되지 않았을 때 (감지 범위 밖)
         if (currentInteractable != null)
         {
+            // 🔴 핵심 수정: 현재 잡고 있는 대상이 NPC라면, 여기서 바로 해제하지 않습니다.
+            // (CheckDistanceForExit 함수에서 exitDistance를 체크해서 해제할 것이기 때문입니다)
+            if (currentInteractable is NpcObject) 
+            {
+                return; 
+            }
+
+            // NPC가 아닌 다른 오브젝트(문, 아이템 등)는 감지 범위를 벗어나면 바로 해제
             currentInteractable.OnDefocus();
             currentInteractable = null;
         }

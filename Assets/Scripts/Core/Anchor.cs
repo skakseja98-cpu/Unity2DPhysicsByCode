@@ -10,7 +10,11 @@ public class Anchor : MonoBehaviour
     
     [Header("Attachment Settings")]
     [Tooltip("앵커 중심점으로부터 줄이 실제로 연결될 위치의 오프셋(상대 좌표)입니다.")]
-    public Vector2 ropeOffset = Vector2.zero; // [신규 기능] 오프셋 설정
+    public Vector2 ropeOffset = Vector2.zero;
+
+    [Header("Rope Settings")]
+    [Tooltip("이 앵커에 연결될 때 적용할 줄의 길이입니다.")]
+    public float ropeLength = 10f; // [신규 기능] 완전 개별화된 줄 길이
 
     private SpriteRenderer sr;
 
@@ -36,14 +40,14 @@ public class Anchor : MonoBehaviour
         if (sr != null) sr.color = defaultColor;
     }
 
-    // 에디터에서 앵커를 선택했을 때 연결 지점을 시각적으로 보여줌
     void OnDrawGizmosSelected()
     {
+        // 연결 지점 표시
         Gizmos.color = Color.red;
         Vector3 finalPos = AttachPoint;
-        // 연결 지점에 작은 빨간 공 표시
         Gizmos.DrawSphere(finalPos, 0.15f);
-        // 중심점에서 연결 지점까지 선 표시
         Gizmos.DrawLine(transform.position, finalPos);
+
+        // (시각화 요청 없음: 줄 길이 원 그리기 제거됨)
     }
 }

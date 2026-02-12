@@ -9,9 +9,7 @@ public class Player_Grapple : MonoBehaviour
     public LayerMask anchorLayer;      
     public float detectionRadius = 10f; // 앵커 감지 범위
     
-    [Header("Rope Mechanics")]
-    [Tooltip("줄이 생성될 때의 고정 길이. 이 값이 감지 범위보다 길어야 줄이 축 늘어집니다.")]
-    public float maxRopeLength = 15f;   // 고정 줄 길이 (늘어짐 연출용)
+    // [삭제됨] public float maxRopeLength = 15f; -> 이제 Anchor의 설정을 따릅니다.
     
     [Header("Swinging Physics")]
     public float swingAcceleration = 40f;
@@ -43,11 +41,8 @@ public class Player_Grapple : MonoBehaviour
     private float currentGravityScale = 1f;
     private float nextRetractTime = 0f;
 
-    // 타겟팅 관련 변수
     private Anchor currentTargetAnchor; 
-    private Anchor closestAnchor;       
-
-    // [복구] 고스트 모드 관련 변수
+    
     private bool isGhostMode;
     private int playerLayer;
     private int groundLayerIndex;
@@ -58,10 +53,8 @@ public class Player_Grapple : MonoBehaviour
         boxCol = _col;
         movement = _move;
 
-        // [복구] 레이어 인덱스 계산 (충돌 무시용)
         playerLayer = gameObject.layer;
         
-        // Ground LayerMask에서 실제 레이어 인덱스 추출
         int layerVal = movement.groundLayer.value;
         int index = 0;
         while(layerVal > 1) { layerVal >>= 1; index++; }
@@ -107,7 +100,6 @@ public class Player_Grapple : MonoBehaviour
 
     public void ApplyPhysics(bool isRetractHeld, Vector2 inputDir)
     {
-        // [복구] 고스트 모드(벽 통과) 관리 로직 실행
         ManageGhostMode(isRetractHeld);
 
         if (!HasAnchor) 
@@ -118,7 +110,6 @@ public class Player_Grapple : MonoBehaviour
 
         float dist = Vector2.Distance(transform.position, anchorPos);
         
-        // 줄 길이 제한 로직 (Slack)
         IsTaut = dist >= currentMaxLen - 0.2f;
 
         if (!movement.IsGrounded && IsTaut && inputDir.x != 0)
@@ -132,23 +123,17 @@ public class Player_Grapple : MonoBehaviour
         if (CurrentRope != null) CurrentRope.UpdateEndPosition(transform.position);
     }
 
-    // ---------------------------------------------------------
-    // [복구] 고스트 모드 로직 (Ground 레이어 충돌 무시)
-    // ---------------------------------------------------------
     private void ManageGhostMode(bool isRetractHeld)
     {
-        // 땅에 있을 때는 고스트 모드 해제
         if (movement.IsGrounded)
         {
             if (isGhostMode) SetGhostMode(false);
             return;
         }
 
-        // 벽 속에 갇혀있는지 확인
         bool isInsideWall = Physics2D.OverlapBox(boxCol.bounds.center, boxCol.bounds.size * 0.7f, 0f, movement.groundLayer);
         bool shouldBeGhost = false;
 
-        // G키를 누르고 있거나, 이미 벽 속에 있다면 고스트 모드 유지
         if (isRetractHeld) shouldBeGhost = true;
         else if (isInsideWall) shouldBeGhost = true;
 
@@ -158,10 +143,8 @@ public class Player_Grapple : MonoBehaviour
     private void SetGhostMode(bool active)
     {
         isGhostMode = active;
-        // 플레이어와 땅의 충돌을 켜거나 끔
         Physics2D.IgnoreLayerCollision(playerLayer, groundLayerIndex, active);
     }
-    // ---------------------------------------------------------
 
     private void FindClosestAnchor()
     {
@@ -202,14 +185,13 @@ public class Player_Grapple : MonoBehaviour
 
     private void ConnectToAnchor(Anchor target)
     {
-        // [수정 적용됨] 오프셋이 적용된 실제 연결 지점 가져오기
         anchorPos = target.AttachPoint;
 
         GameObject ropeObj = Instantiate(ropePrefab, anchorPos, Quaternion.identity);
         CurrentRope = ropeObj.GetComponent<Rope>();
         
-        // [수정 적용됨] 인스펙터 고정 길이 적용 (늘어짐 연출)
-        currentMaxLen = maxRopeLength; 
+        // [수정] 앵커의 개별 길이 설정을 가져옵니다.
+        currentMaxLen = target.ropeLength; 
 
         CurrentRope.InitializeRope(anchorPos, transform, currentMaxLen, currentGravityScale);
         HasAnchor = true;

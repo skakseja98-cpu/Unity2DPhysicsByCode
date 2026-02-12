@@ -23,6 +23,7 @@ public class Player_Input : MonoBehaviour
 
     // 내부 상태 변수
     private float currentCooldownTimer = 0f;
+    private float inputDisableTimer = 0f;
     private bool isObserving = false;
 
     // (외부에서 쿨타임 UI 등을 표시할 때 접근 가능)
@@ -30,12 +31,29 @@ public class Player_Input : MonoBehaviour
 
     void Update()
     {
+        // [추가] 타이머가 남아있다면 입력을 막고 리턴
+        if (inputDisableTimer > 0)
+        {
+            inputDisableTimer -= Time.deltaTime;
+            ResetInputs(); // 입력값들을 0으로 초기화해서 움직이지 않게 함
+            return;        // 아래의 입력 로직 실행 안 함
+        }
+
         HandleObservationInput();
 
         // 관찰 중이면(시간 정지) 아래 일반 조작 로직은 실행하지 않음
         if (isObserving) return;
 
         HandleNormalInput();
+
+        
+    }
+
+    // [추가] 외부(장애물)에서 호출할 함수
+    public void DisableInput(float duration)
+    {
+        inputDisableTimer = duration;
+        ResetInputs(); // 즉시 멈춤
     }
 
     void HandleObservationInput()
