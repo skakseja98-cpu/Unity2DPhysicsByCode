@@ -25,6 +25,19 @@ public class Rope : MonoBehaviour
         public RopeNode(Vector2 pos) { position = pos; oldPosition = pos; }
     }
 
+    public void UpdateStartPos(Vector2 newStartPos)
+    {
+        startPos = newStartPos;
+        
+        // 첫 번째 노드(고정점)도 즉시 이동시켜야 시각적으로 끊어지지 않음
+        if (nodes.Count > 0)
+        {
+            nodes[0].position = startPos;
+            // 물리 계산 튀는 것 방지 (선택 사항)
+            nodes[0].oldPosition = startPos; 
+        }
+    }
+
     // [수정] 파라미터에 float gravityScale 추가됨
     public void InitializeRope(Vector2 anchor, Transform player, float maxLen, float gravityScale)
     {

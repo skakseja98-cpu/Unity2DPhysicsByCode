@@ -46,6 +46,7 @@ public class Player_Grapple : MonoBehaviour
     private bool isGhostMode;
     private int playerLayer;
     private int groundLayerIndex;
+    private Anchor connectedAnchor;
 
     public void Initialize(Rigidbody2D _rb, BoxCollider2D _col, Player_Movement _move)
     {
@@ -106,6 +107,18 @@ public class Player_Grapple : MonoBehaviour
         {
             IsTaut = false;
             return;
+        }
+
+        if (connectedAnchor != null)
+        {
+            // 앵커가 움직였을 수 있으므로 좌표를 새로 가져옴
+            anchorPos = connectedAnchor.AttachPoint; 
+
+            // 줄(Rope)에게도 바뀐 시작 위치를 알려줌
+            if (CurrentRope != null)
+            {
+                CurrentRope.UpdateStartPos(anchorPos);
+            }
         }
 
         float dist = Vector2.Distance(transform.position, anchorPos);
@@ -182,15 +195,15 @@ public class Player_Grapple : MonoBehaviour
 
     private void ConnectToAnchor(Anchor target)
     {
+        connectedAnchor = target; // 1. 앵커 객체 자체를 저장 (추적용)
         anchorPos = target.AttachPoint;
 
         GameObject ropeObj = Instantiate(ropePrefab, anchorPos, Quaternion.identity);
         CurrentRope = ropeObj.GetComponent<Rope>();
         
-        // [수정] 앵커의 개별 길이 설정을 가져옵니다.
         currentMaxLen = target.ropeLength; 
 
-        CurrentRope.InitializeRope(anchorPos, transform, currentMaxLen, currentGravityScale);
+        CurrentRope.InitializeRope(anchorPos, transform, currentMaxLen, currentGravityScale); //
         HasAnchor = true;
     }
 
@@ -206,6 +219,7 @@ public class Player_Grapple : MonoBehaviour
         if (CurrentRope != null) Destroy(CurrentRope.gameObject);
         CurrentRope = null;
         HasAnchor = false;
+        connectedAnchor = null; // 2. 연결 정보 삭제
         
         FindClosestAnchor();
     }

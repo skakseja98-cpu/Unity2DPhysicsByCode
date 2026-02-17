@@ -5,6 +5,7 @@ public class Player_Interaction : MonoBehaviour
     public static Player_Interaction Instance;
     public float detectRange = 2f;
     public LayerMask interactLayer;
+    public Rocket_Controller rocket_Controller;
 
     private IInteractable currentInteractable;
 
@@ -21,6 +22,11 @@ public class Player_Interaction : MonoBehaviour
     {
         DetectObject();
         CheckDistanceForExit();
+
+        if (Input.GetKeyDown(KeyCode.L))
+        {
+            rocket_Controller.Launch();
+        }
     }
 
     public void HandleNpcInteraction()

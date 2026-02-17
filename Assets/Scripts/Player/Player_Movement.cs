@@ -1,11 +1,12 @@
 using UnityEngine;
 using System.Collections;
-using UnityEngine.Tilemaps; // [필수] 타일맵 사용을 위해 추가
+using UnityEngine.Tilemaps;
 
 [RequireComponent(typeof(Rigidbody2D))]
 [RequireComponent(typeof(BoxCollider2D))]
 public class Player_Movement : MonoBehaviour
 {
+    // ... (기존 변수들 그대로 유지) ...
     [Header("Horizontal")]
     public float maxSpeed = 10f;
     public float acceleration = 50f;
@@ -19,10 +20,8 @@ public class Player_Movement : MonoBehaviour
     public float fallGravityMult = 1.5f;
     public float jumpCutMult = 0.5f;
     
-    [Header("Corner Correction (Smooth)")] // [신규 기능]
-    [Tooltip("머리 위 장애물 감지 거리")]
+    [Header("Corner Correction (Smooth)")]
     public float cornerCheckDist = 0.3f;
-    [Tooltip("코너 보정 시 옆으로 밀어주는 속도 (부드러운 이동)")]
     public float cornerSlideSpeed = 5f;
     
     [Header("Double Jump")]
@@ -49,15 +48,14 @@ public class Player_Movement : MonoBehaviour
     public float rayInset = 0.05f;
     public float coyoteTime = 0.15f;
 
-    [Header("Climbing Settings")] // [신규 기능]
+    [Header("Climbing Settings")]
     public float climbSpeed = 5f;
-    public LayerMask climbableLayer; // "Climbable" 레이어 설정 필요
-    public float climbJumpCooldownTime = 0.2f; // [신규 설정] 0.5초는 좀 길 수 있어서 0.2초 추천
+    public LayerMask climbableLayer; 
+    public float climbJumpCooldownTime = 0.2f;
 
-    
     public bool IsGrounded { get; private set; }
-    public bool IsClimbing { get; private set; } // 벽타기 중인가?
-    public bool CanClimb { get; private set; }   // 벽타기 가능한 영역에 있는가?
+    public bool IsClimbing { get; private set; }
+    public bool CanClimb { get; private set; }
     public int FacingDirection { get; private set; } = 1;
     public int JumpsLeft { get; private set; } 
     public float CurrentClimbCooldown { get; private set; }
@@ -69,6 +67,9 @@ public class Player_Movement : MonoBehaviour
     private float gravityMultiplier = 1f; 
     private float jumpForce;
     private float coyoteTimeCounter;
+
+    // [추가] 현재 붙잡고 있는 벽의 물리엔진(속도 확인용)
+    private Rigidbody2D currentWallRB; 
 
     public void Initialize(Rigidbody2D _rb, BoxCollider2D _col)
     {
@@ -83,6 +84,7 @@ public class Player_Movement : MonoBehaviour
 
     public void HandleGroundCheck()
     {
+        // ... (기존 코드 유지) ...
         Bounds bounds = boxCol.bounds;
         float yOrigin = bounds.min.y + 0.05f; 
         float checkDist = 0.05f + rayLength;
@@ -127,21 +129,19 @@ public class Player_Movement : MonoBehaviour
         {
             SetClimbing(false);
             CurrentClimbCooldown = climbJumpCooldownTime;
+            // 벽에서 점프할 때 벽의 속도도 같이 더해줌 (관성 유지)
+            if (currentWallRB != null) rb.linearVelocity += currentWallRB.linearVelocity;
         }
 
+        // ... (기존 점프 로직 유지) ...
         if (Mathf.Abs(gravityMultiplier) < 0.1f) return;
 
         if (JumpsLeft > 0)
         {
-            
             float force = jumpForce;
-
             bool isFirstJump = IsGrounded || coyoteTimeCounter > 0;
 
-            if (isFirstJump)
-            {
-                JumpsLeft = maxJumps - 1;
-            }
+            if (isFirstJump) JumpsLeft = maxJumps - 1;
             else
             {
                 force *= doubleJumpMultiplier;
@@ -149,10 +149,7 @@ public class Player_Movement : MonoBehaviour
             }
 
             float gScale = Mathf.Abs(gravityMultiplier);
-            if (gScale < 1f && gScale > 0.01f)
-            {
-                force *= Mathf.Pow(gScale, jumpForceScaling);
-            }
+            if (gScale < 1f && gScale > 0.01f) force *= Mathf.Pow(gScale, jumpForceScaling);
 
             Vector2 vel = rb.linearVelocity;
             vel.y = force;
@@ -164,6 +161,7 @@ public class Player_Movement : MonoBehaviour
 
     public void CutJump()
     {
+        // ... (기존 코드 유지) ...
         if (rb.linearVelocity.y > 0)
         {
             Vector2 vel = rb.linearVelocity;
@@ -177,9 +175,10 @@ public class Player_Movement : MonoBehaviour
         if (IsClimbing)
         {
             ApplyClimbingPhysics(input);
-            return; // 기존 중력/이동 로직 실행 안 함
+            return; 
         }
 
+        // ... (기존 이동 로직 유지) ...
         if (input.x != 0) FacingDirection = (int)Mathf.Sign(input.x);
 
         if (Mathf.Abs(gravityMultiplier) < 0.1f)
@@ -192,7 +191,7 @@ public class Player_Movement : MonoBehaviour
 
         if (isSwinging)
         {
-            // 스윙 로직 (생략)
+            // 스윙 로직
         }
         else
         {
@@ -222,7 +221,6 @@ public class Player_Movement : MonoBehaviour
             velocity.x = Mathf.MoveTowards(velocity.x, targetSpeed, currentAccel * Time.fixedDeltaTime);
         }
         
-        // [신규 기능] 코너 보정 로직 적용 (상승 중일 때만)
         if (!IsGrounded && velocity.y > 0 && !isSwinging)
         {
             ApplyCornerCorrection(ref velocity);
@@ -240,10 +238,21 @@ public class Player_Movement : MonoBehaviour
         rb.linearVelocity = velocity;
     }
 
+    // [수정] 벽타기 물리 적용 함수
     private void ApplyClimbingPhysics(Vector2 input)
     {
-        // 입력한 방향대로 즉시 속도 적용 (등속 운동)
-        rb.linearVelocity = input * climbSpeed;
+        // 1. 내 의지대로 움직이는 속도
+        Vector2 myVelocity = input * climbSpeed;
+
+        // 2. 벽이 움직이는 속도 (벽이 RB를 가지고 있다면)
+        Vector2 wallVelocity = Vector2.zero;
+        if (currentWallRB != null)
+        {
+            wallVelocity = currentWallRB.linearVelocity;
+        }
+
+        // 3. 최종 속도 = 내 이동 + 벽 이동
+        rb.linearVelocity = myVelocity + wallVelocity;
 
         // 바닥에 닿았는데 아래로 내려가려 하면 -> 벽타기 해제
         if (IsGrounded && input.y < 0)
@@ -252,20 +261,30 @@ public class Player_Movement : MonoBehaviour
         }
     }
 
+    // [수정] 충돌 시 벽의 정보(Rigidbody)를 가져옴
     private void OnTriggerEnter2D(Collider2D collision)
     {
         if (((1 << collision.gameObject.layer) & climbableLayer) != 0)
         {
             CanClimb = true;
+            // 벽이 움직이는 물체라면 Rigidbody2D가 있을 것임
+            currentWallRB = collision.GetComponent<Rigidbody2D>();
         }
     }
-
+    
+    // [수정] 떨어지거나 나갈 때 정보 초기화
     private void OnTriggerExit2D(Collider2D collision)
     {
         if (((1 << collision.gameObject.layer) & climbableLayer) != 0)
         {
             CanClimb = false;
             
+            // 나가려는 벽이 내가 잡고 있던 벽이라면 초기화
+            if(collision.GetComponent<Rigidbody2D>() == currentWallRB)
+            {
+                currentWallRB = null;
+            }
+
             if (IsClimbing)
             {
                 SetClimbing(false);
@@ -273,45 +292,27 @@ public class Player_Movement : MonoBehaviour
         }
     }
 
-    // -----------------------------------------------------------------------
-    // [신규 기능] 코너 보정 (Corner Correction) - 부드러운 슬라이딩 방식
-    // -----------------------------------------------------------------------
+    // ... (나머지 Corner Correction, Zero Gravity 로직 등 기존 코드 유지) ...
     private void ApplyCornerCorrection(ref Vector2 velocity)
     {
         Bounds bounds = boxCol.bounds;
-        
-        // 머리 위 감지 거리 (속도에 비례하되 최소값 보장)
         float checkDistance = Mathf.Max(cornerCheckDist, velocity.y * Time.fixedDeltaTime);
-        
-        // 왼쪽 끝과 오른쪽 끝에서 위로 레이 발사
-        // rayInset을 약간 주어 완벽한 끝보다는 살짝 안쪽을 검사 (오작동 방지)
         Vector2 leftOrigin = new Vector2(bounds.min.x + rayInset, bounds.max.y);
         Vector2 rightOrigin = new Vector2(bounds.max.x - rayInset, bounds.max.y);
 
         bool hitLeft = Physics2D.Raycast(leftOrigin, Vector2.up, checkDistance, groundLayer);
         bool hitRight = Physics2D.Raycast(rightOrigin, Vector2.up, checkDistance, groundLayer);
 
-        // 한쪽만 닿았을 때 (모서리 상황)
         if (hitLeft && !hitRight)
         {
-            // 왼쪽이 막힘 -> 오른쪽으로 밀어줌
-            // 1. 위치를 직접 조금씩 이동 (부드럽게)
             float moveAmount = cornerSlideSpeed * Time.fixedDeltaTime;
             rb.position += new Vector2(moveAmount, 0);
-            
-            // 2. 속도 보정 (선택 사항: 벽쪽으로 미는 입력이 있어도 상쇄시킬 수 있음)
-            // if (velocity.x < 0) velocity.x = 0; 
         }
         else if (!hitLeft && hitRight)
         {
-            // 오른쪽이 막힘 -> 왼쪽으로 밀어줌
             float moveAmount = cornerSlideSpeed * Time.fixedDeltaTime;
             rb.position -= new Vector2(moveAmount, 0);
-            
-            // if (velocity.x > 0) velocity.x = 0;
         }
-        
-        // 둘 다 닿았다면 완벽한 천장이므로 보정하지 않음 (그냥 부딪힘)
     }
 
     private void ApplyZeroGravityMovement(Vector2 input, bool isSwinging)
@@ -360,15 +361,19 @@ public class Player_Movement : MonoBehaviour
             rb.linearVelocity = Vector2.zero;
             JumpsLeft = maxJumps;
         }
+        else
+        {
+            // [중요] 벽에서 손을 놓을 때, 벽 정보를 즉시 잊어버리지 않도록 주의
+            // (점프 관성을 위해 PerformJump에서 처리함)
+            // 여기서는 상태만 변경
+        }
     }
-
-    private void OnDrawGizmos()
+    
+    // ... (Gizmo 등 나머지 유지) ...
+     private void OnDrawGizmos()
     {
         if (boxCol == null) boxCol = GetComponent<BoxCollider2D>();
-        
         Bounds bounds = boxCol.bounds;
-        
-        // Ground Check Gizmos
         Gizmos.color = IsGrounded ? Color.green : Color.red;
         float yOrigin = bounds.min.y + 0.05f; 
         float checkDist = 0.05f + rayLength;
@@ -379,7 +384,6 @@ public class Player_Movement : MonoBehaviour
         Gizmos.DrawLine(originLeft, originLeft + Vector2.down * checkDist);
         Gizmos.DrawLine(originRight, originRight + Vector2.down * checkDist);
 
-        // Corner Correction Gizmos
         Gizmos.color = Color.yellow;
         Vector2 headLeft = new Vector2(bounds.min.x + rayInset, bounds.max.y);
         Vector2 headRight = new Vector2(bounds.max.x - rayInset, bounds.max.y);
