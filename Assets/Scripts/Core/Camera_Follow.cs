@@ -57,7 +57,9 @@ public class CameraFollow : MonoBehaviour
         bool isZooming = Input.GetKey(KeyCode.LeftControl);
         HandleCameraMode(isZooming);
 
-        float targetX = target.position.x + offset.x + currentLookOffsetX;
+        // [수정] target.position.x를 제거하여 플레이어의 좌우 이동을 추적하지 않음
+        // 이제 카메라는 인스펙터의 Offset X값에 고정되며, 관찰 모드 시에만 currentLookOffsetX만큼 움직입니다.
+        float targetX = offset.x + currentLookOffsetX; 
         float targetY = target.position.y + offset.y + currentLookOffsetY;
         float targetZ = target.position.z + offset.z;
 
@@ -84,16 +86,14 @@ public class CameraFollow : MonoBehaviour
             float yInput = Input.GetAxisRaw("Vertical");
             Vector2 inputDir = new Vector2(xInput, yInput).normalized;
 
-            // [수정] 방향별로 다른 거리 적용
             float targetOffX = 0f;
             if (inputDir.x > 0) targetOffX = inputDir.x * freeLookDistRight;
-            else if (inputDir.x < 0) targetOffX = inputDir.x * freeLookDistLeft; // inputDir.x가 음수이므로 결과도 음수(좌측 이동)
+            else if (inputDir.x < 0) targetOffX = inputDir.x * freeLookDistLeft;
 
             float targetOffY = 0f;
             if (inputDir.y > 0) targetOffY = inputDir.y * freeLookDistUp;
-            else if (inputDir.y < 0) targetOffY = inputDir.y * freeLookDistDown; // inputDir.y가 음수이므로 결과도 음수(하측 이동)
+            else if (inputDir.y < 0) targetOffY = inputDir.y * freeLookDistDown;
 
-            // unscaledDeltaTime을 사용하여 시간 정지 중에도 부드럽게 이동
             currentLookOffsetX = Mathf.SmoothDamp(currentLookOffsetX, targetOffX, ref lookVelocityX, freeLookSmoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
             currentLookOffsetY = Mathf.SmoothDamp(currentLookOffsetY, targetOffY, ref lookVelocityY, freeLookSmoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
         }
@@ -104,7 +104,6 @@ public class CameraFollow : MonoBehaviour
                 cam.orthographicSize = Mathf.Lerp(cam.orthographicSize, defaultSize, Time.unscaledDeltaTime * zoomSpeed);
             }
 
-            // 복귀
             currentLookOffsetX = Mathf.SmoothDamp(currentLookOffsetX, 0f, ref lookVelocityX, freeLookSmoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
             currentLookOffsetY = Mathf.SmoothDamp(currentLookOffsetY, 0f, ref lookVelocityY, freeLookSmoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
         }

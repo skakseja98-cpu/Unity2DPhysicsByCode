@@ -18,10 +18,10 @@ public class Push_Obstacle : MonoBehaviour
     public float stunDuration = 0.5f;
 
     // 플레이어와 충돌했을 때 (Trigger가 아니라 Collider 충돌)
-    private void OnCollisionEnter2D(Collision2D collision)
+    private void OnTriggerEnter2D(Collider2D other)
     {
         // 1. 플레이어인지 확인
-        Player_Controller player = collision.gameObject.GetComponent<Player_Controller>();
+        Player_Controller player = other.gameObject.GetComponent<Player_Controller>();
 
         if (player != null)
         {
