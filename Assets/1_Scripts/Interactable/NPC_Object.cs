@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Events;
 
 public class NpcObject : MonoBehaviour, IInteractable
 {
@@ -15,6 +16,9 @@ public class NpcObject : MonoBehaviour, IInteractable
     // 🔴 여기가 핵심! 지저분한 변수들을 하나로 묶었습니다.
     [Header("--- 목소리 스타일 설정 ---")]
     public DialogueStyle voiceStyle; 
+
+    [Header("--- 추가 이벤트 ---")]
+    public UnityEvent onInteractEvent;
 
     void Start()
     {
@@ -41,6 +45,11 @@ public class NpcObject : MonoBehaviour, IInteractable
         InteractionUIManager.Instance.StartDialog(transform.position, sentences, voiceStyle, hasTalked);
 
         hasTalked = true;
+
+        if (onInteractEvent != null)
+        {
+            onInteractEvent.Invoke();
+        }
     }
     
     public float GetExitDistance() => exitDistance;

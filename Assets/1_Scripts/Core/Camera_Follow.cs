@@ -35,11 +35,11 @@ public class CameraFollow : MonoBehaviour
     // 내부 변수
     private float currentVelocityX;
     private float currentVelocityY;
-    
     private float currentLookOffsetX; 
     private float currentLookOffsetY; 
     private float lookVelocityX;
     private float lookVelocityY;
+    private bool isLocked = false;
 
     private Camera cam;
     private float defaultSize;
@@ -53,6 +53,12 @@ public class CameraFollow : MonoBehaviour
     void LateUpdate()
     {
         if (target == null) return;
+
+        if (isLocked)
+        {
+            transform.position = new Vector3(transform.position.x, target.position.y + offset.y, target.position.z + offset.z);
+            return;
+        }
 
         bool isZooming = Input.GetKey(KeyCode.LeftControl);
         HandleCameraMode(isZooming);
@@ -107,5 +113,10 @@ public class CameraFollow : MonoBehaviour
             currentLookOffsetX = Mathf.SmoothDamp(currentLookOffsetX, 0f, ref lookVelocityX, freeLookSmoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
             currentLookOffsetY = Mathf.SmoothDamp(currentLookOffsetY, 0f, ref lookVelocityY, freeLookSmoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
         }
+    }
+
+    public void SetLockMode(bool active)
+    {
+        isLocked = active;
     }
 }

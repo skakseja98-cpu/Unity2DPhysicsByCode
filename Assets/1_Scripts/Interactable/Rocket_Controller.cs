@@ -27,6 +27,8 @@ public class Rocket_Controller : MonoBehaviour
     public AudioClip ignitionSound;     // 점화 소리
     public AudioClip flyingSound;       // 비행 소리
 
+    public CameraFollow mainCam;
+
     // 상태 변수
     private bool isLaunched = false;
     private Rigidbody2D rb;
@@ -56,6 +58,8 @@ public class Rocket_Controller : MonoBehaviour
     private IEnumerator LaunchSequence()
     {
         isLaunched = true;
+
+        if (mainCam != null) mainCam.SetLockMode(true);
 
         // --- 1단계: 점화 (진동) ---
         if (engineEffect != null) engineEffect.Play();
@@ -120,7 +124,32 @@ public class Rocket_Controller : MonoBehaviour
         if (engineEffect != null) engineEffect.Stop();
         if (audioSource != null) audioSource.Stop();
 
+        if (mainCam != null) mainCam.SetLockMode(false);
+
         Debug.Log("로켓 도착!");
+    }
+
+    public void ResetRocket()
+    {
+        // 1. 실행 중인 발사 코루틴 강제 종료
+        StopAllCoroutines();
+
+        // 2. 상태 변수 초기화
+        isLaunched = false;
+        
+        // 3. 물리 속도 및 위치 초기화
+        rb.linearVelocity = Vector2.zero;
+        rb.MovePosition(startPos); // 시작 위치로 강제 이동
+        rb.position = startPos;    // 이중 확인
+
+        // 4. 이펙트 및 사운드 끄기
+        if (engineEffect != null) engineEffect.Stop();
+        if (audioSource != null) audioSource.Stop();
+
+        // 5. 카메라 락 해제 (플레이어가 떨어졌으므로 카메라는 플레이어를 다시 따라가야 함)
+        if (mainCam != null) mainCam.SetLockMode(false);
+
+        Debug.Log("로켓이 초기화되었습니다.");
     }
     
     // 디버그용: 에디터에서 목표 지점 선 그리기
