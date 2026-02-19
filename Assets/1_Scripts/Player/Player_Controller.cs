@@ -25,10 +25,8 @@ public class Player_Controller : MonoBehaviour
 
     void Awake()
     {
-        if (Instance == null) 
-            Instance = this;
-        else 
-            Destroy(gameObject);
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
 
         _input = GetComponent<Player_Input>();
         _movement = GetComponent<Player_Movement>();
@@ -53,41 +51,33 @@ public class Player_Controller : MonoBehaviour
             _movement.SetClimbing(true);
         }
 
-        // -------------------------------------------------------
-        // [수정] 키 역할 분리
-        // -------------------------------------------------------
-
-        // 1. [E] NPC / 문 상호작용 (대화 스킵 포함)
         if (_input.IsNpcInteractDown)
         {
             if (_interaction != null) _interaction.HandleNpcInteraction();
         }
 
-        // 3. [F] 앵커 발사 (기존 유지, 이제 다른 기능과 겹치지 않음)
         if (_input.IsGrappleDown)
         {
-            if (_grapple.HasAnchor)
-            {
-                _grapple.TryReleaseAnchor();
-            }
-            else
-            {
-                _grapple.TryFireAnchor();
-            }
+            if (_grapple.HasAnchor) _grapple.TryReleaseAnchor();
+            else _grapple.TryFireAnchor();
         }
 
-        // ... (점프 로직 유지) ...
+        // [신규] 자동 당기기 실행
+        if (_input.IsRetractDown)
+        {
+            _grapple.StartAutoRetract();
+        }
+
         if (_input.IsJumpDown) _movement.PerformJump();
         if (_input.IsJumpUp) _movement.CutJump();
     }
 
     void FixedUpdate()
     {
-        _grapple.ApplyPhysics(_input.IsRetractHeld, _input.MoveVector);
+        // [수정] IsRetractHeld 매개변수 제거
+        _grapple.ApplyPhysics(_input.MoveVector);
 
-        // 스윙 상태: 앵커가 있고 + 땅이 아니고 + 줄이 팽팽할 때
         bool isSwinging = _grapple.HasAnchor && !_movement.IsGrounded && _grapple.IsTaut;
-        
         _movement.ApplyPhysics(_input.MoveVector, isSwinging);
     }
 }

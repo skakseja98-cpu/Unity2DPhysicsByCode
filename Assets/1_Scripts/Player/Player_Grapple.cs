@@ -7,29 +7,26 @@ public class Player_Grapple : MonoBehaviour
     
     [Header("Anchor Detection")]
     public LayerMask anchorLayer;      
-    public float detectionRadius = 10f; // 앵커 감지 범위
-    
-    // [삭제됨] public float maxRopeLength = 15f; -> 이제 Anchor의 설정을 따릅니다.
+    public float detectionRadius = 10f; 
     
     [Header("Swinging Physics")]
     public float swingAcceleration = 40f;
 
-    [Header("Retraction")]
+    [Header("Auto Retraction")] // [수정] 쿨타임 변수 삭제 및 자동 해제 거리 추가
     public float pullInitSpeed = 5f;
     public float pullMaxSpeed = 25f;
     public float pullAccelDuration = 1.0f;
-    public float retractionCooldown = 0.5f;
+    [Tooltip("앵커와 이 거리만큼 가까워지면 자동으로 줄이 풀립니다.")]
+    public float autoReleaseDistance = 1.5f;
     
     [Header("Release Boost")]
     public float releaseVelocityMult = 1.2f;
     public float releaseUpwardForce = 5f;
 
-    // 상태 프로퍼티
     public bool HasAnchor { get; private set; }
     public Rope CurrentRope { get; private set; }
     public bool IsTaut { get; private set; }
     
-    // 내부 변수
     private Rigidbody2D rb;
     private BoxCollider2D boxCol;
     private Player_Movement movement;
@@ -39,7 +36,6 @@ public class Player_Grapple : MonoBehaviour
     private float pullTimer;
 
     private float currentGravityScale = 1f;
-    private float nextRetractTime = 0f;
 
     private Anchor currentTargetAnchor; 
     
@@ -47,6 +43,9 @@ public class Player_Grapple : MonoBehaviour
     private int playerLayer;
     private int groundLayerIndex;
     private Anchor connectedAnchor;
+
+    // [신규] 자동 당기기 상태 변수
+    private bool isAutoRetracting = false; 
 
     public void Initialize(Rigidbody2D _rb, BoxCollider2D _col, Player_Movement _move)
     {
@@ -99,9 +98,21 @@ public class Player_Grapple : MonoBehaviour
         if (HasAnchor) ReleaseAnchor();
     }
 
-    public void ApplyPhysics(bool isRetractHeld, Vector2 inputDir)
+    // [신규] G키를 눌렀을 때 외부에서 호출
+    public void StartAutoRetract()
     {
-        ManageGhostMode(isRetractHeld);
+        if (HasAnchor && !isAutoRetracting)
+        {
+            isAutoRetracting = true;
+            pullTimer = 0f;
+        }
+    }
+
+    // [수정] bool 매개변수 제거
+    public void ApplyPhysics(Vector2 inputDir)
+    {
+        // 당기는 중일 때 고스트 모드 유지
+        ManageGhostMode(isAutoRetracting);
 
         if (!HasAnchor) 
         {
@@ -111,14 +122,8 @@ public class Player_Grapple : MonoBehaviour
 
         if (connectedAnchor != null)
         {
-            // 앵커가 움직였을 수 있으므로 좌표를 새로 가져옴
             anchorPos = connectedAnchor.AttachPoint; 
-
-            // 줄(Rope)에게도 바뀐 시작 위치를 알려줌
-            if (CurrentRope != null)
-            {
-                CurrentRope.UpdateStartPos(anchorPos);
-            }
+            if (CurrentRope != null) CurrentRope.UpdateStartPos(anchorPos);
         }
 
         float dist = Vector2.Distance(transform.position, anchorPos);
@@ -130,15 +135,15 @@ public class Player_Grapple : MonoBehaviour
             rb.AddForce(new Vector2(inputDir.x * swingAcceleration, 0), ForceMode2D.Force);
         }
 
-        ApplyRetraction(isRetractHeld);
+        ApplyRetraction(); // [수정]
         ApplyDistanceConstraint();
         
         if (CurrentRope != null) CurrentRope.UpdateEndPosition(transform.position);
     }
 
-    private void ManageGhostMode(bool isRetractHeld)
+    private void ManageGhostMode(bool isRetracting)
     {
-        if (isRetractHeld)
+        if (isRetracting)
         {
             if (!isGhostMode) SetGhostMode(true);
             return;
@@ -195,15 +200,17 @@ public class Player_Grapple : MonoBehaviour
 
     private void ConnectToAnchor(Anchor target)
     {
-        connectedAnchor = target; // 1. 앵커 객체 자체를 저장 (추적용)
+        connectedAnchor = target; 
         anchorPos = target.AttachPoint;
+
+        if(connectedAnchor != null) connectedAnchor.SetConnected(true);
 
         GameObject ropeObj = Instantiate(ropePrefab, anchorPos, Quaternion.identity);
         CurrentRope = ropeObj.GetComponent<Rope>();
         
         currentMaxLen = target.ropeLength; 
 
-        CurrentRope.InitializeRope(anchorPos, transform, currentMaxLen, currentGravityScale); //
+        CurrentRope.InitializeRope(anchorPos, transform, currentMaxLen, currentGravityScale); 
         HasAnchor = true;
     }
 
@@ -219,32 +226,39 @@ public class Player_Grapple : MonoBehaviour
         if (CurrentRope != null) Destroy(CurrentRope.gameObject);
         CurrentRope = null;
         HasAnchor = false;
-        connectedAnchor = null; // 2. 연결 정보 삭제
+        
+        if (connectedAnchor != null) connectedAnchor.SetConnected(false); 
+        connectedAnchor = null; 
+
+        // [추가] 당기기 상태 강제 초기화
+        isAutoRetracting = false;
+        pullTimer = 0f;
         
         FindClosestAnchor();
     }
 
-    private void ApplyRetraction(bool isHeld)
+    // [수정] 목표 거리에 도달하면 자동으로 줄 해제
+    private void ApplyRetraction()
     {
-        if (isHeld && Time.time >= nextRetractTime)
+        if (isAutoRetracting)
         {
             Vector2 toAnchor = anchorPos - rb.position;
-            
-            if (toAnchor.magnitude > 0.3f)
+            float dist = toAnchor.magnitude;
+
+            // 해제 거리에 도달하면 자동 해제 후 함수 종료
+            if (dist <= autoReleaseDistance)
             {
-                pullTimer += Time.fixedDeltaTime;
-                float t = Mathf.Clamp01(pullTimer / pullAccelDuration);
-                float speed = Mathf.Lerp(pullInitSpeed, pullMaxSpeed, t);
-                rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, toAnchor.normalized * speed, 0.1f);
-                
-                currentMaxLen = Vector2.Distance(rb.position, anchorPos);
-                if (CurrentRope != null) CurrentRope.UpdateRopeLength(currentMaxLen);
+                TryReleaseAnchor();
+                return;
             }
-        }
-        else
-        {
-            if (pullTimer > 0f) nextRetractTime = Time.time + retractionCooldown;
-            pullTimer = 0f;
+
+            pullTimer += Time.fixedDeltaTime;
+            float t = Mathf.Clamp01(pullTimer / pullAccelDuration);
+            float speed = Mathf.Lerp(pullInitSpeed, pullMaxSpeed, t);
+            rb.linearVelocity = Vector2.Lerp(rb.linearVelocity, toAnchor.normalized * speed, 0.1f);
+            
+            currentMaxLen = dist;
+            if (CurrentRope != null) CurrentRope.UpdateRopeLength(currentMaxLen);
         }
     }
 
