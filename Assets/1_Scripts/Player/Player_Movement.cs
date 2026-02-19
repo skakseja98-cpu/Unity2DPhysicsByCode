@@ -69,7 +69,8 @@ public class Player_Movement : MonoBehaviour
     private float coyoteTimeCounter;
 
     // [추가] 현재 붙잡고 있는 벽의 물리엔진(속도 확인용)
-    private Rigidbody2D currentWallRB; 
+    private Rigidbody2D currentWallRB;
+    private Rigidbody2D currentGroundRB;
 
     public void Initialize(Rigidbody2D _rb, BoxCollider2D _col)
     {
@@ -96,6 +97,8 @@ public class Player_Movement : MonoBehaviour
         RaycastHit2D hitC = Physics2D.Raycast(originCenter, Vector2.down, checkDist, groundLayer);
         RaycastHit2D hitL = Physics2D.Raycast(originLeft, Vector2.down, checkDist, groundLayer);
         RaycastHit2D hitR = Physics2D.Raycast(originRight, Vector2.down, checkDist, groundLayer);
+
+        RaycastHit2D validHit = hitC.collider != null ? hitC : (hitL.collider != null ? hitL : hitR);
         
         bool wasGrounded = IsGrounded;
         IsGrounded = (hitC.collider != null || hitL.collider != null || hitR.collider != null);
@@ -103,7 +106,9 @@ public class Player_Movement : MonoBehaviour
         if (IsGrounded) 
         {
             coyoteTimeCounter = coyoteTime;
-            JumpsLeft = maxJumps; 
+            JumpsLeft = maxJumps;
+
+            currentGroundRB = validHit.collider.GetComponent<Rigidbody2D>();
         }
         else 
         {
@@ -112,6 +117,7 @@ public class Player_Movement : MonoBehaviour
             {
                 JumpsLeft--;
             }
+            currentGroundRB = null;
         }
     }
 
@@ -153,8 +159,13 @@ public class Player_Movement : MonoBehaviour
 
             Vector2 vel = rb.linearVelocity;
             vel.y = force;
-            rb.linearVelocity = vel;
 
+            if (IsGrounded && currentGroundRB != null)
+            {
+                vel.y += currentGroundRB.linearVelocity.y;
+            }
+            
+            rb.linearVelocity = vel;
             coyoteTimeCounter = 0f; 
         }
     }
@@ -188,6 +199,13 @@ public class Player_Movement : MonoBehaviour
         }
 
         Vector2 velocity = rb.linearVelocity;
+
+        Vector2 platformVelocity = Vector2.zero;
+        if (IsGrounded && currentGroundRB != null && !isSwinging)
+        {
+            platformVelocity = currentGroundRB.linearVelocity;
+            velocity -= platformVelocity; // 연산을 위해 발판 속도를 잠시 뺌
+        }
 
         if (isSwinging)
         {
@@ -234,6 +252,11 @@ public class Player_Movement : MonoBehaviour
 
         if (currentGravity < 0) velocity.y = Mathf.Max(velocity.y, -maxFallSpeed);
         else if (currentGravity > 0) velocity.y = Mathf.Min(velocity.y, maxFallSpeed);
+
+        if (!isSwinging)
+        {
+            velocity += platformVelocity;
+        }
 
         rb.linearVelocity = velocity;
     }
