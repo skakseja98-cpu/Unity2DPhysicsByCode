@@ -3,54 +3,63 @@ using UnityEngine;
 public class Push_Obstacle : MonoBehaviour
 {
     [Header("Push Settings")]
-    [Tooltip("플레이어가 날아갈 방향 (X, Y)")]
     public Vector2 pushDirection = Vector2.up; 
-
-    [Tooltip("밀쳐내는 힘 (클수록 멀리 날아갑니다)")]
     public float pushForce = 20f;
-
-    [Tooltip("체크하면 닿는 순간 플레이어의 기존 속도를 0으로 만들고 튕겨냅니다.")]
     public bool resetVelocity = true;
 
-    [Header("Stun Settings")]
-    [Tooltip("충돌 후 플레이어가 조작할 수 없는 시간 (초)")]
+    [Header("Stun & Feel Settings")]
     public float stunDuration = 0.5f;
+    public float hitStopDuration = 0.08f; 
+    public float shakeDuration = 0.2f;
+    public float shakeMagnitude = 0.3f;
+
+    [Header("Audio Settings")]
+    [Tooltip("소리를 재생할 오디오 소스 (장애물에 부착)")]
+    public AudioSource audioSource;
+    [Tooltip("플레이어가 부딪혔을 때 날 피격음")]
+    public AudioClip hitSound;
 
     private void OnTriggerEnter2D(Collider2D collision)
     {
-        // 1. 플레이어인지 확인
         Player_Controller player = collision.gameObject.GetComponent<Player_Controller>();
 
         if (player != null)
         {
-            // [추가된 부분] ------------------------------------------------
-            // 플레이어가 벽타기 중이라면 강제로 떼어냅니다.
-            // 이걸 안 하면 물리력이 적용되자마자 다시 벽에 붙어버려서 안 날아갑니다.
             Player_Movement movement = player.GetComponent<Player_Movement>();
             if (movement != null && movement.IsClimbing)
             {
                 movement.SetClimbing(false);
             }
-            // -------------------------------------------------------------
 
             Rigidbody2D rb = player.Rb;
 
             if (rb != null)
             {
-                // 2. 기존 속도 초기화 (튕겨나가는 방향을 확실하게 하기 위해)
-                if (resetVelocity)
-                {
-                    rb.linearVelocity = Vector2.zero; 
-                }
+                if (resetVelocity) rb.linearVelocity = Vector2.zero; 
 
-                // 3. 힘 가하기
+                // 1. 물리적 밀치기 적용
                 rb.AddForce(pushDirection.normalized * pushForce, ForceMode2D.Impulse);
                 
-                // 4. 입력 잠금 (경직)
+                // 2. 조작 잠금
                 Player_Input playerInput = player.GetComponent<Player_Input>();
-                if (playerInput != null)
+                if (playerInput != null) playerInput.DisableInput(stunDuration);
+
+                // 3. 타격감: 역경직
+                if (Time_Manager.Instance != null)
+                    Time_Manager.Instance.TriggerHitStop(hitStopDuration, 0.05f);
+
+                // 4. 타격감: 카메라 흔들림
+                CameraFollow cam = Camera.main.GetComponent<CameraFollow>();
+                if (cam != null) cam.TriggerShake(shakeDuration, shakeMagnitude);
+
+                // 5. 타격감: 플레이어 붉은색 깜빡임
+                Player_Visuals visuals = player.GetComponent<Player_Visuals>();
+                if (visuals != null) visuals.TriggerFlash();
+
+                // 6. 타격감: 사운드 재생
+                if (audioSource != null && hitSound != null)
                 {
-                    playerInput.DisableInput(stunDuration);
+                    audioSource.PlayOneShot(hitSound);
                 }
             }
         }
